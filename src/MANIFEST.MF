@@ -1,0 +1,5 @@
+Manifest-Version: 1.0
+MixinConfigs: cw_portal_guard.mixins.json
+Specification-Title: Cube Warper Portal Guard
+Implementation-Title: cw_portal_guard
+Implementation-Version: 1.0.0

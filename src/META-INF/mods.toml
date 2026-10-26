@@ -1,0 +1,31 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="All Rights Reserved"
+[[mods]]
+modId="cw_portal_guard"
+version="1.0.3"
+displayName="Cube Warper Portal Guard"
+authors="CubeWarper"
+description='''Client-side workaround for the Immersive Portals 3.0.7 first-look crash: pre-creates portal destination dimensions outside the render pass and guards the null ChunkRenderDispatcher NPE.'''
+clientSideOnly=true
+[[dependencies.cw_portal_guard]]
+modId="forge"
+mandatory=true
+versionRange="[47,)"
+ordering="NONE"
+side="CLIENT"
+[[dependencies.cw_portal_guard]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1,1.20.2)"
+ordering="NONE"
+side="CLIENT"
+[[dependencies.cw_portal_guard]]
+modId="immersive_portals"
+mandatory=true
+versionRange="[3.0.0,)"
+ordering="AFTER"
+side="CLIENT"
+
+[[mixins]]
+config="cw_portal_guard.mixins.json"
