@@ -41,7 +41,7 @@ public class CwPortalGuard {
 
     public CwPortalGuard() {
         MinecraftForge.EVENT_BUS.register(CwPortalGuard.class);
-        LOGGER.info("[cw_portal_guard] loaded (v1.0.3)");
+        LOGGER.info("[cw_portal_guard] loaded (v1.1.0)");
     }
 
     /** 关键：每帧渲染前（收包之后、renderLevel 之前）做预热，此时不在门户渲染中。 */

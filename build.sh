@@ -21,9 +21,18 @@ FORGE=$(ls -1 "$MC"/libraries/net/minecraftforge/forge/1.20.1-47.*/forge-1.20.1-
 EVENTBUS=$(ls -1 "$MC"/libraries/net/minecraftforge/eventbus/*/eventbus-*.jar | sort -V | tail -1)
 MIXIN=$(ls -1 "$MC"/libraries/org/spongepowered/mixin/*/mixin-*.jar | sort -V | tail -1)
 JAVAFML=$(ls -1 "$MC"/libraries/net/minecraftforge/javafmllanguage/*/javafmllanguage-*.jar | sort -V | tail -1)
+FMLCORE=$(ls -1 "$MC"/libraries/net/minecraftforge/fmlcore/*/fmlcore-*.jar | sort -V | tail -1)
 SLF4J=$(ls -1 "$MC"/libraries/org/slf4j/slf4j-api/*/slf4j-api-*.jar | sort -V | tail -1)
+ASM=$(ls -1 "$MC"/libraries/org/ow2/asm/asm/*/asm-*.jar | sort -V | tail -1)
+ASMTREE=$(ls -1 "$MC"/libraries/org/ow2/asm/asm-tree/*/asm-tree-*.jar | sort -V | tail -1)
+# Configured/JEI 兼容补丁的编译依赖（运行时由 mixin plugin 做存在性门控）
+CONFIGURED=$(ls -1 "$MODS"/configured-forge-*.jar 2>/dev/null | sort -V | tail -1)
 
-CP="$CLIENT;$FORGE;$EVENTBUS;$MIXIN;$JAVAFML;$SLF4J;$IPJAR"
+[ -f "$ASM" ] || { echo "找不到 asm jar: $ASM"; exit 1; }
+[ -f "$ASMTREE" ] || { echo "找不到 asm-tree jar: $ASMTREE"; exit 1; }
+[ -f "$CONFIGURED" ] || { echo "找不到 configured jar: $CONFIGURED"; exit 1; }
+
+CP="$CLIENT;$FORGE;$EVENTBUS;$MIXIN;$JAVAFML;$FMLCORE;$SLF4J;$ASM;$ASMTREE;$CONFIGURED;$IPJAR"
 
 OUT="$PROJ/build/classes"
 rm -rf "$OUT"; mkdir -p "$OUT"
@@ -58,13 +67,14 @@ echo "[2/4] 复制资源 ..."
 cp "$PROJ/src/META-INF/mods.toml" "$OUT/META-INF/mods.toml" 2>/dev/null || {
   mkdir -p "$OUT/META-INF"; cp "$PROJ/src/META-INF/mods.toml" "$OUT/META-INF/mods.toml"; }
 cp "$PROJ/src/cw_portal_guard.mixins.json" "$OUT/cw_portal_guard.mixins.json"
+cp "$PROJ/src/cw_portal_guard.configured.mixins.json" "$OUT/cw_portal_guard.configured.mixins.json"
 cp "$PROJ/src/pack.mcmeta" "$OUT/pack.mcmeta"
 
 echo "[3/4] 打包 ..."
 DIST="$PROJ/dist"; mkdir -p "$DIST"
 VER=$(grep -m1 '^version=' "$PROJ/src/META-INF/mods.toml" | cut -d'"' -f2)
 JARNAME="cw_portal_guard-$VER.jar"
-rm -f "$DIST/cw_portal_guard-1.0.0.jar"
+rm -f "$DIST"/cw_portal_guard-*.jar
 "$JAR" --create --file "$(win "$DIST/$JARNAME")" \
        --manifest "$(win "$PROJ/src/MANIFEST.MF")" \
        -C "$(win "$OUT")" .

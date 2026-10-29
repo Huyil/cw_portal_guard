@@ -3,10 +3,10 @@ loaderVersion="[47,)"
 license="All Rights Reserved"
 [[mods]]
 modId="cw_portal_guard"
-version="1.0.3"
+version="1.1.0"
 displayName="Cube Warper Portal Guard"
 authors="CubeWarper"
-description='''Client-side workaround for the Immersive Portals 3.0.7 first-look crash: pre-creates portal destination dimensions outside the render pass and guards the null ChunkRenderDispatcher NPE.'''
+description='''Client-side workaround for the Immersive Portals 3.0.7 first-look crash: pre-creates portal destination dimensions outside the render pass and guards the null ChunkRenderDispatcher NPE. Also fixes the Configured 2.2.3 + JEI 15.74 config-menu crash (only active when both of those mods are installed).'''
 clientSideOnly=true
 [[dependencies.cw_portal_guard]]
 modId="forge"
@@ -27,5 +27,22 @@ versionRange="[3.0.0,)"
 ordering="AFTER"
 side="CLIENT"
 
+# Optional: the Configured + JEI compat mixins only apply when both mods are
+# present (see ConfiguredJeiMixinPlugin). Missing either mod is not an error.
+[[dependencies.cw_portal_guard]]
+modId="configured"
+mandatory=false
+versionRange="[2.2.0,)"
+ordering="AFTER"
+side="CLIENT"
+[[dependencies.cw_portal_guard]]
+modId="jei"
+mandatory=false
+versionRange="[15.0,)"
+ordering="AFTER"
+side="CLIENT"
+
 [[mixins]]
 config="cw_portal_guard.mixins.json"
+[[mixins]]
+config="cw_portal_guard.configured.mixins.json"

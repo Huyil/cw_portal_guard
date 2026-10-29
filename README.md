@@ -101,8 +101,44 @@ bash build.sh            # 产物 dist/cw_portal_guard-1.0.0.jar
   3. jar 根目录要有 `pack.mcmeta`（`pack_format: 15`），否则启动会弹
      「未能加载有效的ResourcePackInfo」警告页。
 - `v1.0.3`：`MixinPortalSync` 在收包阶段建维度后，`reloading cancelled` 归零、不再崩溃。
+- `v1.1.0`：新增 Configured + JEI 配置菜单崩溃修复（见 §8），按 mod 存在性门控，缺 mod 不启用也不报错。
 
-## 8. 上游修复建议
+## 8. JEI 配置菜单崩溃（Configured 2.2.3 + JEI 15.74）
+
+打开 JEI 配置菜单时客户端 NPE 崩溃（crash report 是 `Ticking screen` +
+`ListMenuScreen.m_86600_`），真正的原因在日志前一行：`IllegalStateException: Config schema is inactive: jei`。
+
+链路：JEI 齿轮 → Configured 的 `ModConfigSelectionScreen` → `init()` 里先 `constructEntries()` →
+为每个配置取文件名 → `JeiConfig.getFileName()` → JEI 15.60+ 的 deprecated
+`IJeiConfigFile#getPath()` 对「没有本地文件」的 schema 直接抛异常（本次是远程服务器同步来的
+`jei-server.ini`）→ `init()` 中断，`searchTextField` 没建出来 → 下一 tick NPE。
+
+修复（v1.1.0 起内置，**只有 Configured 和 JEI 同时安装才启用**）：
+
+| 组件 | 作用 |
+|---|---|
+| `ConfiguredJeiMixinPlugin` | mixin config plugin：`configured` 与 `jei` 都在才应用兼容 mixin；确认缺任一个就跳过（不报错）。`ModList` 还没就绪时不缓存“否”（避免过早判定把修复整个禁掉），目标类缺失由 `required: false` 兜底 |
+| `MixinConfiguredConfigMap` | 在 `ClientHandler.createConfigMap` 返回处过滤掉「取文件名会抛异常」的配置项（JEI 齿轮与 mod 列表两条入口共用这个汇聚点），从根上避免 `init()` 中断 |
+| `MixinConfiguredListGuard` | 技术兜底：屏幕若仍处于半初始化（`searchTextField`/`list` 为 null），tick/render 跳过而不是 NPE；字段用反射读取（内部类为 protected，跨包不能直接引用） |
+
+效果：单人 / 自建 LAN 不受影响（服务端配置有本地文件，条目照常显示）；远程服只少了那一条
+「无本地文件」的服务端配置，客户端配置全部正常。
+
+日志：
+
+```
+[cw_portal_guard] Configured + JEI compat enabled (JEI config menu guard)
+[cw_portal_guard] hid unavailable config entry from jei (CLIENT)
+```
+
+### 已知限制
+
+- 过滤发生在 Configured 侧，JEI 自身的 deprecated API 行为未改；JEI 若移除
+  `IJeiConfigFile` / `IJeiConfigManager`（已标记 forRemoval），Configured 的 JEI 集成本身会失效，
+  与本补丁无关。
+- 兼容 mixin 的编译依赖：`configured-forge-*.jar`、`asm`+`asm-tree`、`fmlcore`（`build.sh` 已自动探测）。
+
+## 9. 上游修复建议（Immersive Portals）
 
 `iPortalTeam/ImmersivePortalsMod`（1.20.1 分支）`MixinLevelRenderer.onSetupTerrainBegin`：
 

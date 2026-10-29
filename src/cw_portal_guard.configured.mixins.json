@@ -1,0 +1,14 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "cw.guard.mixin.compat",
+  "compatibilityLevel": "JAVA_17",
+  "plugin": "cw.guard.compat.ConfiguredJeiMixinPlugin",
+  "client": [
+    "MixinConfiguredConfigMap",
+    "MixinConfiguredListGuard"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
