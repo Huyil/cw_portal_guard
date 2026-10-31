@@ -1,6 +1,6 @@
 modLoader="javafml"
 loaderVersion="[47,)"
-license="All Rights Reserved"
+license="MIT"
 [[mods]]
 modId="cw_portal_guard"
 version="1.3.6"
@@ -10,7 +10,9 @@ description='''One jar for both sides; each side fixes its own Immersive Portals
 
 SERVER / integrated server (single-player): Immersive Portals completes its dimension-id record during ServerAboutToStart, before MinecraftServer#createLevels, so dimensions created during startup never get an id (AE2 ae2:spatial_storage, and other mods that insert a LevelStem in createLevels). Packets referencing such a dimension fail to encode (RuntimeException: Missing Dimension <id>) and the player is kicked. The guard re-runs Immersive Portals' own record completion at ServerStartedEvent - after every level exists - and persists it.
 
-CLIENT: pre-creates portal destination dimensions outside the render pass and guards the null ChunkRenderDispatcher NPE (first look through a portal into a not-yet-loaded dimension). Also fixes the Configured 2.2.3 + JEI 15.74 config-menu crash (only active when both of those mods are installed).'''
+CLIENT: pre-creates portal destination dimensions outside the render pass and guards the null ChunkRenderDispatcher NPE (first look through a portal into a not-yet-loaded dimension). Also fixes the Configured 2.2.3 + JEI 15.74 config-menu crash (only active when both of those mods are installed).
+
+Licensed under the MIT License: you may freely bundle this jar in any modpack and use it on any server, forked or not.'''
 [[dependencies.cw_portal_guard]]
 modId="forge"
 mandatory=true
