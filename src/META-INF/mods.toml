@@ -3,29 +3,32 @@ loaderVersion="[47,)"
 license="All Rights Reserved"
 [[mods]]
 modId="cw_portal_guard"
-version="1.1.0"
+version="1.3.6"
 displayName="Cube Warper Portal Guard"
 authors="CubeWarper"
-description='''Client-side workaround for the Immersive Portals 3.0.7 first-look crash: pre-creates portal destination dimensions outside the render pass and guards the null ChunkRenderDispatcher NPE. Also fixes the Configured 2.2.3 + JEI 15.74 config-menu crash (only active when both of those mods are installed).'''
-clientSideOnly=true
+description='''One jar for both sides; each side fixes its own Immersive Portals 3.0.7 problem.
+
+SERVER / integrated server (single-player): Immersive Portals completes its dimension-id record during ServerAboutToStart, before MinecraftServer#createLevels, so dimensions created during startup never get an id (AE2 ae2:spatial_storage, and other mods that insert a LevelStem in createLevels). Packets referencing such a dimension fail to encode (RuntimeException: Missing Dimension <id>) and the player is kicked. The guard re-runs Immersive Portals' own record completion at ServerStartedEvent - after every level exists - and persists it.
+
+CLIENT: pre-creates portal destination dimensions outside the render pass and guards the null ChunkRenderDispatcher NPE (first look through a portal into a not-yet-loaded dimension). Also fixes the Configured 2.2.3 + JEI 15.74 config-menu crash (only active when both of those mods are installed).'''
 [[dependencies.cw_portal_guard]]
 modId="forge"
 mandatory=true
 versionRange="[47,)"
 ordering="NONE"
-side="CLIENT"
+side="BOTH"
 [[dependencies.cw_portal_guard]]
 modId="minecraft"
 mandatory=true
 versionRange="[1.20.1,1.20.2)"
 ordering="NONE"
-side="CLIENT"
+side="BOTH"
 [[dependencies.cw_portal_guard]]
 modId="immersive_portals"
 mandatory=true
 versionRange="[3.0.0,)"
 ordering="AFTER"
-side="CLIENT"
+side="BOTH"
 
 # Optional: the Configured + JEI compat mixins only apply when both mods are
 # present (see ConfiguredJeiMixinPlugin). Missing either mod is not an error.

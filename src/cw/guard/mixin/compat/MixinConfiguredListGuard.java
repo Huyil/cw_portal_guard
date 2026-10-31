@@ -84,6 +84,9 @@ public abstract class MixinConfiguredListGuard {
 
     @Inject(method = "m_86600_", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
     private void cw$guardTick(CallbackInfo ci) {
+        if (!cw.guard.CwGuardConfig.configuredListGuard()) {
+            return;
+        }
         cw$resolve();
         if (cw$isNull(cwSearchField)) {
             cw$warnOnce("tick");
@@ -93,6 +96,9 @@ public abstract class MixinConfiguredListGuard {
 
     @Inject(method = "m_88315_", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
     private void cw$guardRender(GuiGraphics graphics, int mouseX, int mouseY, float partialTick, CallbackInfo ci) {
+        if (!cw.guard.CwGuardConfig.configuredListGuard()) {
+            return;
+        }
         cw$resolve();
         if (cw$isNull(cwSearchField) || cw$isNull(cwListField)) {
             cw$warnOnce("render");

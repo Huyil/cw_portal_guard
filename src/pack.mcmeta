@@ -1,6 +1,6 @@
 {
   "pack": {
     "pack_format": 15,
-    "description": "cw_portal_guard (client-side Immersive Portals crash guard)"
+    "description": "cw_portal_guard (client render guard + server dimension-id guard)"
   }
 }

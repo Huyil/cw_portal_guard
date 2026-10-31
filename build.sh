@@ -22,7 +22,17 @@ EVENTBUS=$(ls -1 "$MC"/libraries/net/minecraftforge/eventbus/*/eventbus-*.jar | 
 MIXIN=$(ls -1 "$MC"/libraries/org/spongepowered/mixin/*/mixin-*.jar | sort -V | tail -1)
 JAVAFML=$(ls -1 "$MC"/libraries/net/minecraftforge/javafmllanguage/*/javafmllanguage-*.jar | sort -V | tail -1)
 FMLCORE=$(ls -1 "$MC"/libraries/net/minecraftforge/fmlcore/*/fmlcore-*.jar | sort -V | tail -1)
+FMLLOADER=$(ls -1 "$MC"/libraries/net/minecraftforge/fmlloader/*/fmlloader-*.jar | sort -V | tail -1)
+BRIGADIER=$(ls -1 "$MC"/libraries/com/mojang/brigadier/*/brigadier-*.jar | sort -V | tail -1)
 SLF4J=$(ls -1 "$MC"/libraries/org/slf4j/slf4j-api/*/slf4j-api-*.jar | sort -V | tail -1)
+# net.minecraftforge.api.distmarker.Dist（@EventBusSubscriber / FMLEnvironment.dist 的类型）
+# 运行时由 version json 里的 net.minecraftforge:mergetool:<ver>:api 提供；编译期需要它在 -cp 上。
+MERGETOOL=$(ls -1 "$MC"/libraries/net/minecraftforge/mergetool/*/mergetool-*-api.jar 2>/dev/null | sort -V | tail -1)
+# LWJGL（org.lwjgl.opengl.GL11 等）—— 编译 GL 状态复位层需要
+LWJGL_GL=$(ls -1 "$MC"/libraries/org/lwjgl/lwjgl-opengl/*/lwjgl-opengl-*.jar 2>/dev/null | grep -v natives | sort -V | tail -1)
+LWJGL_CORE=$(ls -1 "$MC"/libraries/org/lwjgl/lwjgl/*/lwjgl-*.jar 2>/dev/null | grep -v natives | sort -V | tail -1)
+[ -f "$LWJGL_GL" ] || { echo "找不到 lwjgl-opengl jar"; exit 1; }
+[ -f "$MERGETOOL" ] || { echo "找不到 mergetool api jar（Dist 类所在）"; exit 1; }
 ASM=$(ls -1 "$MC"/libraries/org/ow2/asm/asm/*/asm-*.jar | sort -V | tail -1)
 ASMTREE=$(ls -1 "$MC"/libraries/org/ow2/asm/asm-tree/*/asm-tree-*.jar | sort -V | tail -1)
 # Configured/JEI 兼容补丁的编译依赖（运行时由 mixin plugin 做存在性门控）
@@ -32,7 +42,7 @@ CONFIGURED=$(ls -1 "$MODS"/configured-forge-*.jar 2>/dev/null | sort -V | tail -
 [ -f "$ASMTREE" ] || { echo "找不到 asm-tree jar: $ASMTREE"; exit 1; }
 [ -f "$CONFIGURED" ] || { echo "找不到 configured jar: $CONFIGURED"; exit 1; }
 
-CP="$CLIENT;$FORGE;$EVENTBUS;$MIXIN;$JAVAFML;$FMLCORE;$SLF4J;$ASM;$ASMTREE;$CONFIGURED;$IPJAR"
+CP="$CLIENT;$FORGE;$EVENTBUS;$MIXIN;$JAVAFML;$FMLCORE;$FMLLOADER;$BRIGADIER;$SLF4J;$ASM;$ASMTREE;$CONFIGURED;$IPJAR;$MERGETOOL;$LWJGL_GL;$LWJGL_CORE"
 
 OUT="$PROJ/build/classes"
 rm -rf "$OUT"; mkdir -p "$OUT"
@@ -74,7 +84,7 @@ echo "[3/4] 打包 ..."
 DIST="$PROJ/dist"; mkdir -p "$DIST"
 VER=$(grep -m1 '^version=' "$PROJ/src/META-INF/mods.toml" | cut -d'"' -f2)
 JARNAME="cw_portal_guard-$VER.jar"
-rm -f "$DIST"/cw_portal_guard-*.jar
+rm -f "$DIST/cw_portal_guard-$VER.jar"
 "$JAR" --create --file "$(win "$DIST/$JARNAME")" \
        --manifest "$(win "$PROJ/src/MANIFEST.MF")" \
        -C "$(win "$OUT")" .

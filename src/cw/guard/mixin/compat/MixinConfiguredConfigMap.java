@@ -50,7 +50,7 @@ public abstract class MixinConfiguredConfigMap {
         ModContext context,
         CallbackInfoReturnable<Map<ConfigType, Set<IModConfig>>> cir
     ) {
-        if (!cw$compatActive()) {
+        if (!cw.guard.CwGuardConfig.configuredJeiFilter() || !cw$compatActive()) {
             return;
         }
         Map<ConfigType, Set<IModConfig>> configs = cir.getReturnValue();

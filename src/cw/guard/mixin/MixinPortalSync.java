@@ -21,11 +21,14 @@ public abstract class MixinPortalSync {
 
     @Inject(method = "acceptDataSync", at = @At("RETURN"))
     private void cw$prewarmAfterDataSync(Vec3 pos, CompoundTag customData, CallbackInfo ci) {
+        if (!cw.guard.CwGuardConfig.portalSyncPrewarm()) {
+            return;
+        }
         try {
             Portal self = (Portal) (Object) this;
             ResourceKey<Level> dest = self.getDestDim();
             if (dest != null) {
-                cw.guard.CwPortalGuard.prewarmDim(dest, "portal-sync");
+                cw.guard.client.ClientGuard.prewarmDim(dest, "portal-sync");
             }
         } catch (Throwable ignored) {
         }

@@ -42,7 +42,7 @@ public abstract class MixinLevelRendererGuard {
     private void cw$skipTerrainSetupWhenDispatcherMissing(
         Camera camera, Frustum frustum, boolean hasForcedFrustum, boolean spectator, CallbackInfo ci
     ) {
-        if (f_109436_ != null) {
+        if (f_109436_ != null || !cw.guard.CwGuardConfig.renderGuard()) {
             return;
         }
         if (!WorldRenderInfo.isRendering()) {
