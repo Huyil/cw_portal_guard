@@ -8,6 +8,7 @@
 | **客户端** | 首次看穿通往「本次会话还没加载过」的维度时 `ChunkRenderDispatcher == null` 崩溃 | `cw.guard.client.ClientGuard` + `cw.guard.mixin.*` | ✅（仅 client 段） |
 | **客户端** | Configured 2.2.3 + JEI 15.74 配置菜单崩溃 | `cw.guard.compat.*` + `mixin.compat.*` | ✅（仅 client 段，且两个 mod 都在才启用） |
 | **客户端** | Botania 进度饼 HUD 泄漏 GL 状态 → 区块整片黑（准星指着祭坛时） | `cw.guard.client.GlStateSanitizer` | ❌ 不需要 |
+| **服务端** | Create × CobbleGen：刷石机优化在自定义维度静默失效 | `cw.guard.compat.CobbleGenCompat` | ❌ 不需要 |
 
 同一个 jar 两端都能装：`mods.toml` 里 **没有** `clientSideOnly`，所有客户端逻辑都放在
 `cw.guard.client.*` 与被 `@EventBusSubscriber(value = Dist.CLIENT)` 标记的类里，
@@ -294,7 +295,81 @@ stencilFunc=514(GL_EQUAL) ref=1 valueMask=255 writeMask=0 fail=ZERO zfail=KEEP z
 
 ---
 
-## 6. 验证记录
+## 6. 服务端修复 D：Create × CobbleGen 兼容（刷石机优化按维度失效）
+
+### 6.1 现象
+
+Create 的钻头「刷石机优化」（钻头下方有漏斗/滑槽/传送带时，掉落物直接塞进容器、不生成物品实体）
+**在某些维度失效**，方块照常长出来、钻头照常转，只是掉落物变成物品实体。不报错、不打日志。
+
+### 6.2 根因
+
+两条路各算各的：
+
+| | 走哪条路 | 结果 |
+|---|---|---|
+| **CobbleGen**（`null2264/CobbleGen`） | 按维度覆盖**真实**生成产物（`config/cobblegen.json5`，如 `dry_ocean → sandstone`、`magma_plateau → tconstruct:seared_cobble`） | 世界里真的长出砂岩/焦炉砖 |
+| **Create 的优化** | `CobbleGenOptimisation#determineOutput` 用 Forge 的 `FluidInteractionRegistry` **模拟** | 熔岩+水永远算出 `minecraft:cobblestone` |
+
+于是 `DrillBlockEntity#optimiseCobbleGen` 里 `currentOutput.equals(stateToBreak)` 不成立 → 静默 `return false`。
+这也解释了"hexahedron 里正常"：那个维度没被 CobbleGen 特殊配置，默认还是圆石。
+
+实测（同一套刷石机，只换维度；修复前）：
+
+```
+hexahedron:dry_ocean      actual=sandstone       simulated=cobblestone  match=false
+hexahedron:magma_plateau  actual=seared_cobble   simulated=cobblestone  match=false
+hexahedron:red_canyon     actual=cobblestone     simulated=cobblestone  match=true
+```
+
+### 6.3 修复：往 Forge 流体交互表头部插一条自己的交互
+
+不改 Create、不改 CobbleGen、**不加 mixin**：
+
+- **predicate**：把 `CobbleGen.FLUID_INTERACTION.interact(...)` 跑在 Create 的 `CobbleGenLevel`
+  仿真层上（`setBlock` 被拦成 `blocksAdded` 记录，不写世界）；CobbleGen 命中就把产物放进 ThreadLocal；
+- **interaction**：把产物 `setBlock` 到 Create 传进来的层（模拟时是仿真层，原版时是真实世界）。
+
+Create 的模拟循环是"取第一个 predicate 命中的条目"，我们的条目排在熔岩列表**最前面**，因此：
+
+- CobbleGen 覆盖了该维度 → 模拟拿到真实产物 → 优化恢复；
+- CobbleGen 没覆盖（不命中）→ 完全落回 Forge 默认 → 行为与未装本补丁一致；
+- 真实世界熔岩流动也会先问我们：命中的话放置的正是 CobbleGen 本来要放的方块（调用它自己的判定代码），结果一致。
+
+**为什么不用 mixin**：mixin 要绑死 `CobbleGenOptimisation.determineOutput` 的类名/方法名/私有 record
+签名，Create 升级（上游 1.21 已重构过两次）会硬失败或静默失效；而注册表是本来就有的扩展点，
+失败模式是"功能退回现状"，且预测与现实共用 CobbleGen 同一份代码，不可能漂移。
+
+开关：`cobblegen_compat`（默认开）。所有路径 try/catch，异常一律退回默认行为。
+
+### 6.4 验证（2026-11-06，测试服）
+
+函数级——`determineOutput` 与实际方块：
+
+```
+dry_ocean      actual=sandstone       simulated=sandstone       match=true   （修复前 false）
+magma_plateau  actual=seared_cobble   simulated=seared_cobble   match=true   （修复前 false）
+red_canyon     actual=cobblestone     simulated=cobblestone     match=true   （无回归）
+```
+
+端到端——直接调 `DrillBlockEntity#onBlockBroken`（钻头每次破坏走的同一方法），三个维度：
+
+```
+verdict=OPTIMISED (drops went straight into the container, no item entity)   x3
+before: container=0 itemEntities=0  ->  after: container=1 (+1) itemEntities=0 (+0)
+```
+
+日志：
+
+```
+[cw_portal_guard] cobblegen compat installed: own interaction inserted at lava list head
+[cw_portal_guard] cobblegen compat active: hexahedron:dry_ocean -> minecraft:sandstone
+[cw_portal_guard] cobblegen compat active: hexahedron:magma_plateau -> tconstruct:seared_cobble
+```
+
+---
+
+## 7. 验证记录
 
 ### 5.1 服务端（2026-10-31，真实测试服，A/B）
 
@@ -327,7 +402,7 @@ Configured）上 100% 可解析。
 
 ---
 
-## 7. 已知限制 / 风险
+## 8. 已知限制 / 风险
 
 - 服务端修复靠反射调用 IP 的 `updateAndSaveServerDimIdRecord()`（3.0.7 实测存在）。
   IP 大版本升级若改名，只会打一条 error 日志并停手，不影响启动 —— 此时用
@@ -336,6 +411,9 @@ Configured）上 100% 可解析。
   重连即恢复。运维上不会踩到（重启通常先等 `Done (` 再放人）。
 - 客户端 `repro` 只在单人/集成服务端有意义；联机时改门目的地请用服务端命令。
 - 本 mod 只保证「缺 id 的维度不再踢人」，不改变 AE2 空间存储本身的玩法。
+- cobblegen 兼容层依赖 Forge `FluidInteractionRegistry` 的私有字段 `INTERACTIONS`（反射读取）
+  与「熔岩列表可变」这一前提；任一变化只会让日志出现一条 warn、功能退回现状，不影响启动。
+  若 CobbleGen 将来自己修好，把 `cobblegen_compat=false` 即可停用。
 
 ## License
 

@@ -65,6 +65,9 @@ public final class CwGuardConfig {
         # gl_state_reset      : force a known-good GL state before every world render
         #                       (neutralises HUD code that leaks colorMask/depthMask/stencil)
         gl_state_reset=true
+        # cobblegen_compat    : make Create's drill cobble-gen optimisation aware of CobbleGen's
+        #                       per-dimension output overrides (read when a server starts)
+        cobblegen_compat=true
         """;
 
     private static volatile Snapshot snapshot;
@@ -104,12 +107,16 @@ public final class CwGuardConfig {
         return snapshot().glStateReset;
     }
 
+    public static boolean cobblegenCompat() {
+        return snapshot().cobblegenCompat;
+    }
+
     public static void logState() {
         Snapshot s = snapshot();
         LOGGER.info(
-            "[cw_portal_guard] toggles ({}): syncPreload={} tickPreload={} heal={} renderGuard={} configuredJeiFilter={} configuredListGuard={} dimensionIdGuard={} glStateReset={}",
+            "[cw_portal_guard] toggles ({}): syncPreload={} tickPreload={} heal={} renderGuard={} configuredJeiFilter={} configuredListGuard={} dimensionIdGuard={} glStateReset={} cobblegenCompat={}",
             s.path, s.portalSyncPrewarm, s.tickPrewarm, s.rendererHeal, s.renderGuard,
-            s.configuredJeiFilter, s.configuredListGuard, s.dimensionIdGuard, s.glStateReset
+            s.configuredJeiFilter, s.configuredListGuard, s.dimensionIdGuard, s.glStateReset, s.cobblegenCompat
         );
     }
 
@@ -179,7 +186,8 @@ public final class CwGuardConfig {
             flag(values, "configured_jei_filter"),
             flag(values, "configured_list_guard"),
             flag(values, "dimension_id_guard"),
-            flag(values, "gl_state_reset")
+            flag(values, "gl_state_reset"),
+            flag(values, "cobblegen_compat")
         );
     }
 
@@ -202,16 +210,18 @@ public final class CwGuardConfig {
         boolean configuredJeiFilter,
         boolean configuredListGuard,
         boolean dimensionIdGuard,
-        boolean glStateReset
+        boolean glStateReset,
+        boolean cobblegenCompat
     ) {
         static final Snapshot DEFAULT = new Snapshot(
-            Path.of(""), 0L, 0L, true, true, true, true, true, true, true, true
+            Path.of(""), 0L, 0L, true, true, true, true, true, true, true, true, true
         );
 
         Snapshot validUntil(long next) {
             return new Snapshot(
                 path, mtime, next, portalSyncPrewarm, tickPrewarm, rendererHeal,
-                renderGuard, configuredJeiFilter, configuredListGuard, dimensionIdGuard, glStateReset
+                renderGuard, configuredJeiFilter, configuredListGuard, dimensionIdGuard, glStateReset,
+                cobblegenCompat
             );
         }
     }

@@ -39,6 +39,17 @@ public final class CommonGuard {
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
         DimensionRecordGuard.arm();
+        // CobbleGen 兼容：只有装了 CobbleGen 且开关打开时才加载 CobbleGenCompat（惰性类加载，
+        // 缺 mod 时不会触发 NoClassDefFoundError）
+        try {
+            if (CwGuardConfig.cobblegenCompat()
+                && net.minecraftforge.fml.ModList.get() != null
+                && net.minecraftforge.fml.ModList.get().isLoaded("cobblegen")) {
+                cw.guard.compat.CobbleGenCompat.install();
+            }
+        } catch (Throwable t) {
+            CwPortalGuard.LOGGER.warn("[cw_portal_guard] cobblegen compat not installed: {}", t.toString());
+        }
     }
 
     @SubscribeEvent

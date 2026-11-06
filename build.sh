@@ -7,8 +7,9 @@ PROJ="$(cd "$(dirname "$0")" && pwd)"
 JDK="${JDK:-/mnt/c/Users/huyil/.gradle/jdks/azul_systems__inc_-17-amd64-windows.2}"
 JAVAC="$JDK/bin/javac.exe"
 JAR="$JDK/bin/jar.exe"
-MC="/mnt/m/Minecraft/1.20.1/.minecraft"
-MODS="$MC/versions/Cube Warper/mods"
+# 可用环境变量覆盖：MC=<.minecraft 目录> MODS=<实例 mods 目录> JDK=<JDK 根目录>
+MC="${MC:-/mnt/m/Minecraft/1.20.1/.minecraft}"
+MODS="${MODS:-$MC/versions/Cube Warper/mods}"
 CLIENT="$MC/libraries/net/minecraft/client/1.20.1-20230612.114412/client-1.20.1-20230612.114412-srg.jar"
 IPJAR="$MODS/immersive-portals-3.0.7-all.jar"
 
@@ -28,6 +29,26 @@ SLF4J=$(ls -1 "$MC"/libraries/org/slf4j/slf4j-api/*/slf4j-api-*.jar | sort -V | 
 # net.minecraftforge.api.distmarker.Dist（@EventBusSubscriber / FMLEnvironment.dist 的类型）
 # 运行时由 version json 里的 net.minecraftforge:mergetool:<ver>:api 提供；编译期需要它在 -cp 上。
 MERGETOOL=$(ls -1 "$MC"/libraries/net/minecraftforge/mergetool/*/mergetool-*-api.jar 2>/dev/null | sort -V | tail -1)
+# Create + CobbleGen（cobblegen_compat 兼容层的编译依赖；运行时按存在性门控）
+CREATE=$(ls -1 "$MODS"/create-1.20.1-*.jar 2>/dev/null | sort -V | tail -1)
+COBBLEGEN=$(ls -1 "$MODS"/cobblegen-*.jar 2>/dev/null | sort -V | tail -1)
+# catnip（CobbleGen/Create 共用的库，内嵌在 create jar 的 jarjar 里；编译期抽出来用）
+mkdir -p "$PROJ/libs"
+python3 - "$CREATE" "$PROJ/libs/catnip.jar" <<'EXTRACT'
+import zipfile, io, sys
+src, dst = sys.argv[1], sys.argv[2]
+z = zipfile.ZipFile(src)
+for n in z.namelist():
+    if n.startswith("META-INF/jarjar/") and n.endswith(".jar"):
+        try:
+            inner = zipfile.ZipFile(io.BytesIO(z.read(n)))
+            if "net/createmod/catnip/levelWrappers/WrappedLevel.class" in inner.namelist():
+                open(dst, "wb").write(z.read(n)); sys.exit(0)
+        except Exception: pass
+sys.exit(1)
+EXTRACT
+[ -f "$PROJ/libs/catnip.jar" ] || { echo "从 create jar 提取 catnip 失败"; exit 1; }
+CATNIP="$PROJ/libs/catnip.jar"
 # LWJGL（org.lwjgl.opengl.GL11 等）—— 编译 GL 状态复位层需要
 LWJGL_GL=$(ls -1 "$MC"/libraries/org/lwjgl/lwjgl-opengl/*/lwjgl-opengl-*.jar 2>/dev/null | grep -v natives | sort -V | tail -1)
 LWJGL_CORE=$(ls -1 "$MC"/libraries/org/lwjgl/lwjgl/*/lwjgl-*.jar 2>/dev/null | grep -v natives | sort -V | tail -1)
@@ -42,7 +63,7 @@ CONFIGURED=$(ls -1 "$MODS"/configured-forge-*.jar 2>/dev/null | sort -V | tail -
 [ -f "$ASMTREE" ] || { echo "找不到 asm-tree jar: $ASMTREE"; exit 1; }
 [ -f "$CONFIGURED" ] || { echo "找不到 configured jar: $CONFIGURED"; exit 1; }
 
-CP="$CLIENT;$FORGE;$EVENTBUS;$MIXIN;$JAVAFML;$FMLCORE;$FMLLOADER;$BRIGADIER;$SLF4J;$ASM;$ASMTREE;$CONFIGURED;$IPJAR;$MERGETOOL;$LWJGL_GL;$LWJGL_CORE"
+CP="$CLIENT;$FORGE;$EVENTBUS;$MIXIN;$JAVAFML;$FMLCORE;$FMLLOADER;$BRIGADIER;$SLF4J;$ASM;$ASMTREE;$CONFIGURED;$IPJAR;$MERGETOOL;$LWJGL_GL;$LWJGL_CORE;$CREATE;$COBBLEGEN;$CATNIP"
 
 OUT="$PROJ/build/classes"
 rm -rf "$OUT"; mkdir -p "$OUT"
