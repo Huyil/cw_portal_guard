@@ -51,8 +51,13 @@ Drop `cw_portal_guard-<version>.jar` from
 | `gl_state_reset` | `true` | every frame | Fix 4: reset GL state before world rendering |
 | `dimension_id_guard` | `true` | world start | Fix 1: complete the IP dimension-id table |
 | `cobblegen_compat` | `true` | world start | Fix 5: align Create's simulated output with CobbleGen |
+| `log_messages` | `true` | every frame | Print this mod's log lines (command output is always shown) |
+| `log_language` | *(empty)* | every frame | Language for logs and command output: `en_us`, `zh_cn`, or empty to follow the JVM locale |
 
 > [!NOTE]
+> Message text lives in `assets/cw_portal_guard/lang/*.json`. Setting `log_messages=false`
+> silences this mod's log lines; `/cwguard` output stays available.
+>
 > The two switches marked **world start** are read once in `ServerStartedEvent`.
 > Changes to them take effect after re-entering the world or restarting the server.
 > The remaining switches are read live in their respective events.

@@ -50,7 +50,12 @@
 | `gl_state_reset` | `true` | 每帧 | 修复 4：世界渲染前复位 GL 状态 |
 | `dimension_id_guard` | `true` | 世界启动 | 修复 1：补齐 IP 维度 id 表 |
 | `cobblegen_compat` | `true` | 世界启动 | 修复 5：对齐 Create 与 CobbleGen 的产物 |
+| `log_messages` | `true` | 每帧 | 是否输出本 mod 的日志（命令回显始终可用） |
+| `log_language` | *（空）* | 每帧 | 日志与命令回显的语言：`zh_cn`、`en_us`，留空跟随 JVM 语言环境 |
 
+> 文本资源位于 `assets/cw_portal_guard/lang/*.json`。`log_messages=false` 可关闭本 mod 的日志，
+> `/cwguard` 的回显保持可用。
+>
 > 标记「世界启动」的两项在 `ServerStartedEvent` 读取一次，改动后需重进世界或重启服务器。
 > 其余项在对应事件里实时读取。
 

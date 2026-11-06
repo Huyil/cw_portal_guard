@@ -113,7 +113,7 @@ public abstract class MixinConfiguredConfigMap {
             String type = String.valueOf(config.getType());
             String key = modId + "/" + type;
             if (CW_REPORTED.size() < 16 && CW_REPORTED.add(key)) {
-                CW_LOGGER.info("[cw_portal_guard] hid unavailable config entry from {} ({})", modId, type);
+                cw.guard.Messages.info("log.hid_config_entry", modId + " (" + type + ")");
             }
         } catch (Throwable ignored) {
         }

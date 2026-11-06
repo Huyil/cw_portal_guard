@@ -32,7 +32,7 @@ public final class CommonGuard {
         try {
             CwGuardCommands.registerServer(event);
         } catch (Throwable t) {
-            CwPortalGuard.LOGGER.warn("[cw_portal_guard] failed to register /cwguard: {}", t.toString());
+            Messages.warn("log.registered_commands", String.valueOf(t));
         }
     }
 
@@ -52,7 +52,7 @@ public final class CommonGuard {
                 cw.guard.compat.CobbleGenCompat.uninstall();
             }
         } catch (Throwable t) {
-            CwPortalGuard.LOGGER.warn("[cw_portal_guard] cobblegen compat sync failed: {}", t.toString());
+            Messages.warn("log.cg_sync_failed", String.valueOf(t));
         }
     }
 

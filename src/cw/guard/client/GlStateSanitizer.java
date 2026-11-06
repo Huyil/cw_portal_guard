@@ -1,5 +1,6 @@
 package cw.guard.client;
 
+import cw.guard.Messages;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraftforge.api.distmarker.Dist;
@@ -126,12 +127,10 @@ public final class GlStateSanitizer {
             return;   // 状态没变就不重复刷日志
         }
         lastSignature = signature;
-        LOGGER.warn(
-            "[cw_portal_guard] dirty GL state before world render (stencilTest={} depthTest={} blend={} cull={} colorMask={} depthMask={} depthFunc={} | stencilFunc={} ref={} valueMask={} writeMask={} | fail={} zfail={} zpass={}) - sanitizing",
+        Messages.warn("log.gl_dirty",
             stencilOn, depthTest, blend, cull, colorMask, depthMask, depthFunc,
             stencilFunc, stencilRef, stencilValueMask, stencilWriteMask,
-            stencilFail, stencilPassDepthFail, stencilPassDepthPass
-        );
+            stencilFail, stencilPassDepthFail, stencilPassDepthPass);
     }
 
     private static void apply() {

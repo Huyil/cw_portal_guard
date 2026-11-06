@@ -68,6 +68,14 @@ public final class CwGuardConfig {
         # cobblegen_compat    : make Create's drill cobble-gen optimisation aware of CobbleGen's
         #                       per-dimension output overrides (read when a server starts)
         cobblegen_compat=true
+        # log_messages        : print this mod's log lines (chat/command output is unaffected).
+        #                       Message text comes from assets/cw_portal_guard/lang/*.json
+        log_messages=true
+        # log_language        : language used for log lines and command output, matching a
+        #                       file under assets/cw_portal_guard/lang/ (zh_cn, en_us).
+        #                       Empty = follow the JVM locale (Chinese locale -> zh_cn,
+        #                       otherwise en_us).
+        log_language=
         """;
 
     private static volatile Snapshot snapshot;
@@ -111,13 +119,20 @@ public final class CwGuardConfig {
         return snapshot().cobblegenCompat;
     }
 
+    public static boolean logMessages() {
+        return snapshot().logMessages;
+    }
+
+    public static String logLanguage() {
+        return snapshot().logLanguage;
+    }
+
     public static void logState() {
         Snapshot s = snapshot();
-        LOGGER.info(
-            "[cw_portal_guard] toggles ({}): syncPreload={} tickPreload={} heal={} renderGuard={} configuredJeiFilter={} configuredListGuard={} dimensionIdGuard={} glStateReset={} cobblegenCompat={}",
+        Messages.info("log.toggles",
             s.path, s.portalSyncPrewarm, s.tickPrewarm, s.rendererHeal, s.renderGuard,
-            s.configuredJeiFilter, s.configuredListGuard, s.dimensionIdGuard, s.glStateReset, s.cobblegenCompat
-        );
+            s.configuredJeiFilter, s.configuredListGuard, s.dimensionIdGuard, s.glStateReset,
+            s.cobblegenCompat);
     }
 
     private static Snapshot snapshot() {
@@ -187,7 +202,9 @@ public final class CwGuardConfig {
             flag(values, "configured_list_guard"),
             flag(values, "dimension_id_guard"),
             flag(values, "gl_state_reset"),
-            flag(values, "cobblegen_compat")
+            flag(values, "cobblegen_compat"),
+            flag(values, "log_messages"),
+            values.getOrDefault("log_language", "")
         );
     }
 
@@ -211,17 +228,19 @@ public final class CwGuardConfig {
         boolean configuredListGuard,
         boolean dimensionIdGuard,
         boolean glStateReset,
-        boolean cobblegenCompat
+        boolean cobblegenCompat,
+        boolean logMessages,
+        String logLanguage
     ) {
         static final Snapshot DEFAULT = new Snapshot(
-            Path.of(""), 0L, 0L, true, true, true, true, true, true, true, true, true
+            Path.of(""), 0L, 0L, true, true, true, true, true, true, true, true, true, true, ""
         );
 
         Snapshot validUntil(long next) {
             return new Snapshot(
                 path, mtime, next, portalSyncPrewarm, tickPrewarm, rendererHeal,
                 renderGuard, configuredJeiFilter, configuredListGuard, dimensionIdGuard, glStateReset,
-                cobblegenCompat
+                cobblegenCompat, logMessages, logLanguage
             );
         }
     }

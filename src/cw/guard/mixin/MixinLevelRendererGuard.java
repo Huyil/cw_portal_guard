@@ -51,7 +51,7 @@ public abstract class MixinLevelRendererGuard {
         ci.cancel();
         String key = f_109465_ == null ? "null" : String.valueOf(f_109465_.m_46472_());
         if (CW_LOGGED.size() < 32 && CW_LOGGED.add(key)) {
-            CW_LOGGER.info("[cw_portal_guard] guard skipped terrain setup for uninitialized renderer (dim={})", key);
+            cw.guard.Messages.info("log.guard_skipped", key);
         }
     }
 }

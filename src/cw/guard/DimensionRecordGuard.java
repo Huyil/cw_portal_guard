@@ -63,7 +63,9 @@ public final class DimensionRecordGuard {
     private static int stable;
     private static boolean finished;
     private static boolean disabledLogged;
-    private static String lastResult = "尚未运行";
+    /** 状态以 translation key + 参数保存，输出时按当前语言解析。 */
+    private static String lastResultKey = "dimid.state.not_started";
+    private static Object[] lastResultArgs = new Object[0];
 
     private DimensionRecordGuard() {
     }
@@ -75,13 +77,13 @@ public final class DimensionRecordGuard {
         stable = 0;
         finished = false;
         disabledLogged = false;
-        lastResult = "尚未运行";
+        setResult("dimid.state.not_started");
         if (!CwGuardConfig.dimensionIdGuard()) {
             finished = true;
-            lastResult = "已通过 dimension_id_guard=false 关闭";
+            setResult("dimid.state.disabled");
             if (!disabledLogged) {
                 disabledLogged = true;
-                CwPortalGuard.LOGGER.info("[cw_portal_guard] dimension id guard disabled by config");
+                Messages.info("dimid.state.disabled");
             }
             return;
         }
@@ -114,43 +116,41 @@ public final class DimensionRecordGuard {
             Map<String, Integer> now = snapshot();
 
             if (now == null) {
-                CwPortalGuard.LOGGER.warn("[cw_portal_guard] {}: IP 维度表不可读（serverRecord=null），稍后重试", when);
+                Messages.warn("dimid.log.unreadable", when);
                 return;
             }
             if (before == null) {
-                CwPortalGuard.LOGGER.info("[cw_portal_guard] {}: IP 维度表此前不存在，已初始化 {} 条", when, now.size());
+                Messages.info("dimid.log.initialised", when, now.size());
                 stable = 0;
             } else {
                 int added = logDiff(before, now);
                 if (added > 0) {
                     stable = 0;
-                    CwPortalGuard.LOGGER.info(
-                        "[cw_portal_guard] {}: 维度表 {} -> {} 条（新增 {}）", when, before.size(), now.size(), added);
+                    Messages.info("dimid.log.added", when, before.size(), now.size(), added);
                 } else {
                     stable++;
-                    CwPortalGuard.LOGGER.info(
-                        "[cw_portal_guard] {}: 维度表 {} 条，无变化（第 {} 次稳定）", when, now.size(), stable);
+                    Messages.info("dimid.log.unchanged", when, now.size(), stable);
                 }
             }
 
             if (stable >= STABLE_ATTEMPTS) {
                 finished = true;
-                lastResult = now.size() + " 条（" + attempts + " 次尝试），" + spatialInfo(now);
-                CwPortalGuard.LOGGER.info("[cw_portal_guard] 维度 id 表修复完成：{}", lastResult);
+                setResult("dimid.state.done", now.size(), attempts, spatialInfo(now));
+                Messages.info("dimid.log.completed", lastResultText());
             } else if (attempts >= MAX_ATTEMPTS) {
                 finished = true;
-                lastResult = "达到最大尝试次数 " + MAX_ATTEMPTS + "，表停在 " + now.size() + " 条";
-                CwPortalGuard.LOGGER.warn("[cw_portal_guard] {}", lastResult);
+                setResult("dimid.state.max_attempts", MAX_ATTEMPTS, now.size());
+                Messages.warn("dimid.state.max_attempts", MAX_ATTEMPTS, now.size());
             }
         } catch (ClassNotFoundException e) {
             finished = true;
-            lastResult = "未安装 immersive_portals，无需处理";
-            CwPortalGuard.LOGGER.info("[cw_portal_guard] {}", lastResult);
+            setResult("dimid.state.no_ip");
+            Messages.info("dimid.state.no_ip");
         } catch (Throwable t) {
-            CwPortalGuard.LOGGER.error("[cw_portal_guard] 维度 id 表第 {} 次尝试失败（{}）", attempts, when, t);
+            Messages.error("dimid.log.attempt_failed", attempts, when, t);
             if (attempts >= MAX_ATTEMPTS) {
                 finished = true;
-                lastResult = "尝试失败：" + t;
+                setResult("dimid.state.failed", String.valueOf(t));
             }
         }
     }
@@ -184,8 +184,7 @@ public final class DimensionRecordGuard {
         for (Map.Entry<String, Integer> entry : after.entrySet()) {
             if (!before.containsKey(entry.getKey())) {
                 added++;
-                CwPortalGuard.LOGGER.info(
-                    "[cw_portal_guard] + 补上维度 id: {} -> {}", pretty(entry.getKey()), entry.getValue());
+                Messages.info("dimid.log.added_entry", pretty(entry.getKey()), entry.getValue());
             }
         }
         return added;
@@ -194,10 +193,21 @@ public final class DimensionRecordGuard {
     private static String spatialInfo(Map<String, Integer> table) {
         for (Map.Entry<String, Integer> entry : table.entrySet()) {
             if (entry.getKey().contains("spatial_storage")) {
-                return "ae2:spatial_storage -> " + entry.getValue() + "（已收录）";
+                return Messages.text("dimid.spatial.present", entry.getValue());
             }
         }
-        return "未包含 ae2:spatial_storage（该维度本局可能未创建，属正常）";
+        return Messages.text("dimid.spatial.absent");
+    }
+
+    private static void setResult(String key, Object... args) {
+        lastResultKey = key;
+        lastResultArgs = args;
+    }
+
+    /** 按当前语言解析状态文本。 */
+    public static String lastResultText() {
+        String base = Messages.text(lastResultKey, lastResultArgs);
+        return finished ? base : base + Messages.text("dimid.state.still_checking");
     }
 
     /** ResourceKey.toString() 形如 "ResourceKey[minecraft:dimension / ae2:spatial_storage]"。 */
@@ -225,7 +235,7 @@ public final class DimensionRecordGuard {
             Class<?> recordClass = Class.forName(RECORD);
             Object record = recordClass.getField("serverRecord").get(null);
             if (record == null) {
-                missing.add("<serverRecord 为 null>");
+                missing.add(Messages.text("dimid.check.record_null"));
                 return missing;
             }
             Method getIntId = recordClass.getMethod("getIntId", ResourceKey.class);
@@ -237,13 +247,13 @@ public final class DimensionRecordGuard {
                 }
             }
         } catch (Throwable t) {
-            missing.add("<检查失败: " + t + ">");
+            missing.add(Messages.text("dimid.check.failed", String.valueOf(t)));
         }
         return missing;
     }
 
     /** 给命令用的可读状态。 */
     public static String lastResult() {
-        return lastResult + (finished ? "" : "（仍在复查）");
+        return lastResultText();
     }
 }

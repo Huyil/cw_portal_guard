@@ -30,6 +30,8 @@ SLF4J=$(ls -1 "$MC"/libraries/org/slf4j/slf4j-api/*/slf4j-api-*.jar | sort -V | 
 # 运行时由 version json 里的 net.minecraftforge:mergetool:<ver>:api 提供；编译期需要它在 -cp 上。
 MERGETOOL=$(ls -1 "$MC"/libraries/net/minecraftforge/mergetool/*/mergetool-*-api.jar 2>/dev/null | sort -V | tail -1)
 # Create + CobbleGen（cobblegen_compat 兼容层的编译依赖；运行时按存在性门控）
+# Gson（lang 文件解析）与 Guava（translatable 参数）
+GSON=$(ls -1 "$MC"/libraries/com/google/code/gson/gson/*/gson-*.jar 2>/dev/null | grep -v sources | sort -V | tail -1)
 CREATE=$(ls -1 "$MODS"/create-1.20.1-*.jar 2>/dev/null | sort -V | tail -1)
 COBBLEGEN=$(ls -1 "$MODS"/cobblegen-*.jar 2>/dev/null | sort -V | tail -1)
 # catnip（CobbleGen/Create 共用的库，内嵌在 create jar 的 jarjar 里；编译期抽出来用）
@@ -63,7 +65,7 @@ CONFIGURED=$(ls -1 "$MODS"/configured-forge-*.jar 2>/dev/null | sort -V | tail -
 [ -f "$ASMTREE" ] || { echo "找不到 asm-tree jar: $ASMTREE"; exit 1; }
 [ -f "$CONFIGURED" ] || { echo "找不到 configured jar: $CONFIGURED"; exit 1; }
 
-CP="$CLIENT;$FORGE;$EVENTBUS;$MIXIN;$JAVAFML;$FMLCORE;$FMLLOADER;$BRIGADIER;$SLF4J;$ASM;$ASMTREE;$CONFIGURED;$IPJAR;$MERGETOOL;$LWJGL_GL;$LWJGL_CORE;$CREATE;$COBBLEGEN;$CATNIP"
+CP="$CLIENT;$FORGE;$EVENTBUS;$MIXIN;$JAVAFML;$FMLCORE;$FMLLOADER;$BRIGADIER;$SLF4J;$ASM;$ASMTREE;$CONFIGURED;$IPJAR;$MERGETOOL;$LWJGL_GL;$LWJGL_CORE;$CREATE;$COBBLEGEN;$CATNIP;$GSON"
 
 OUT="$PROJ/build/classes"
 rm -rf "$OUT"; mkdir -p "$OUT"
@@ -100,6 +102,11 @@ cp "$PROJ/src/META-INF/mods.toml" "$OUT/META-INF/mods.toml" 2>/dev/null || {
 cp "$PROJ/src/cw_portal_guard.mixins.json" "$OUT/cw_portal_guard.mixins.json"
 cp "$PROJ/src/cw_portal_guard.configured.mixins.json" "$OUT/cw_portal_guard.configured.mixins.json"
 cp "$PROJ/src/pack.mcmeta" "$OUT/pack.mcmeta"
+# 本地化资源（assets/<modid>/lang/*.json）
+if [ -d "$PROJ/src/assets" ]; then
+  mkdir -p "$OUT/assets"
+  cp -r "$PROJ/src/assets/." "$OUT/assets/"
+fi
 
 echo "[3/4] 打包 ..."
 DIST="$PROJ/dist"; mkdir -p "$DIST"

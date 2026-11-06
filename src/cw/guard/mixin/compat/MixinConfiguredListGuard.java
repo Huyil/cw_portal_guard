@@ -78,7 +78,7 @@ public abstract class MixinConfiguredListGuard {
 
     private void cw$warnOnce(String where) {
         if (CW_LOGGED.compareAndSet(false, true)) {
-            CW_LOGGER.warn("[cw_portal_guard] Configured screen was left half-initialized; skipping {} to avoid a crash", where);
+            cw.guard.Messages.warn("log.configured_half_init", where);
         }
     }
 

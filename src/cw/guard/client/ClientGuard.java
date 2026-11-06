@@ -1,5 +1,6 @@
 package cw.guard.client;
 
+import cw.guard.Messages;
 import cw.guard.CwGuardConfig;
 import cw.guard.CwGuardCommands;
 import cw.guard.mixin.LevelRendererAccessor;
@@ -56,7 +57,7 @@ public final class ClientGuard {
         try {
             CwClientCommands.register(event);
         } catch (Throwable t) {
-            LOGGER.warn("[cw_portal_guard] failed to register client /cwguard: {}", t.toString());
+            Messages.warn("log.registered_commands", String.valueOf(t));
         }
     }
 
@@ -83,11 +84,8 @@ public final class ClientGuard {
         ticks++;
         if (ticks % 1200 == 0) {
             try {
-                LOGGER.info(
-                    "[cw_portal_guard] alive: worlds={} portals={}",
-                    ClientWorldLoader.worldRendererMap.size(),
-                    countPortals()
-                );
+                Messages.info("log.alive",
+                    ClientWorldLoader.worldRendererMap.size(), countPortals());
             } catch (Throwable ignored) {
             }
         }
@@ -116,7 +114,7 @@ public final class ClientGuard {
         }
         if (!announced) {
             announced = true;
-            LOGGER.info("[cw_portal_guard] active (hooked at {})", where);
+            Messages.info("log.active", where);
         }
 
         if (CwGuardConfig.tickPrewarm()) {
@@ -152,9 +150,9 @@ public final class ClientGuard {
             }
             try {
                 renderer.m_109701_(ClientWorldLoader.getWorld(entry.getKey()));
-                LOGGER.info("[cw_portal_guard] healed renderer {}", entry.getKey().m_135782_());
+                Messages.info("log.healed_renderer", entry.getKey().m_135782_());
             } catch (Throwable t) {
-                LOGGER.warn("[cw_portal_guard] heal failed {}: {}", entry.getKey().m_135782_(), t.toString());
+                Messages.warn("log.heal_failed", entry.getKey().m_135782_(), String.valueOf(t));
             }
         }
     }
@@ -176,13 +174,13 @@ public final class ClientGuard {
                 return;
             }
             if (!ClientWorldLoader.getServerDimensions().contains(dest)) {
-                LOGGER.debug("[cw_portal_guard] skip unknown dim {}", dest.m_135782_());
+                Messages.debug("log.skip_unknown_dim", dest.m_135782_());
                 return;
             }
             ClientWorldLoader.getWorld(dest);
-            LOGGER.info("[cw_portal_guard] prewarmed client dimension {} (via {})", dest.m_135782_(), source);
+            Messages.info("log.prewarmed", dest.m_135782_(), source);
         } catch (Throwable t) {
-            LOGGER.warn("[cw_portal_guard] prewarm failed {} ({}): {}", dest.m_135782_(), source, t.toString());
+            Messages.warn("log.prewarm_failed", dest.m_135782_(), source, String.valueOf(t));
         }
     }
 

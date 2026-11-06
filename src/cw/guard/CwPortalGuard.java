@@ -1,7 +1,12 @@
 package cw.guard;
 
+import cw.guard.Messages;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+
+import net.minecraftforge.event.server.ServerAboutToStartEvent;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,15 +49,30 @@ public class CwPortalGuard {
 
     public static final Logger LOGGER = LoggerFactory.getLogger(MODID);
 
+    private static boolean bannerLogged;
+
     public CwPortalGuard() {
+        // 启动横幅留到 FMLCommonSetupEvent：构造阶段语言资源尚未加载，
+        // 此处解析 translation key 会回落成 key 本身。
+        MinecraftForge.EVENT_BUS.register(CwPortalGuard.class);
+    }
+
+    /**
+     * 语言资源就绪后打印启动横幅与开关状态。
+     *
+     * <p>语言资源在资源重载阶段才可用，早于该阶段的 {@code FMLCommonSetupEvent}
+     * 解析 translation key 会回落成 key 本身，因此横幅统一在服务器启动前输出；
+     * 专用服务端与单人集成服务端都会经过这里。
+     */
+    @SubscribeEvent
+    public static void onServerAboutToStart(ServerAboutToStartEvent event) {
+        if (bannerLogged) {
+            return;
+        }
+        bannerLogged = true;
         boolean client = FMLEnvironment.dist == Dist.CLIENT;
-        LOGGER.info("[cw_portal_guard] loaded (v{}) side={}", VERSION, FMLEnvironment.dist);
-        LOGGER.info(
-            "[cw_portal_guard] active fixes on this side: {}",
-            client
-                ? "dimension-id-table (server+client) + portal render guard + configured/jei menu guard"
-                : "dimension-id-table (server)"
-        );
+        Messages.info("log.loaded", VERSION, FMLEnvironment.dist);
+        Messages.info("log.fixes", Messages.text(client ? "log.fixes.both" : "log.fixes.server"));
         CwGuardConfig.logState();
     }
 }

@@ -8,6 +8,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.ResourceLocationArgument;
 import net.minecraft.core.registries.Registries;
+import cw.guard.Messages;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -72,9 +73,7 @@ public final class CwClientCommands {
     private static int dims(CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
         Set<ResourceKey<Level>> loaded = clientWorlds();
-        source.m_288197_(() -> Component.m_237113_(
-            "[cwguard] client worlds (" + loaded.size() + "): " + summarize(loaded)
-        ), false);
+        source.m_288197_(() -> Messages.component("cmd.dims", loaded.size(), summarize(loaded)), false);
         return 1;
     }
 
@@ -84,7 +83,7 @@ public final class CwClientCommands {
         try {
             player = source.m_81375_();
         } catch (Exception e) {
-            source.m_81352_(Component.m_237113_("[cwguard] must be run by a player"));
+            source.m_81352_(Messages.component("cmd.repro_need_player"));
             return 0;
         }
 
@@ -101,9 +100,7 @@ public final class CwClientCommands {
             candidates.add(key);
         }
         if (candidates.isEmpty()) {
-            source.m_81352_(Component.m_237113_(
-                "[cwguard] every dimension is already loaded this session - restart the game and retry"
-            ));
+            source.m_81352_(Messages.component("cmd.repro_all_loaded"));
             return 0;
         }
         candidates.sort(Comparator.comparing(key -> key.m_135782_().toString()));
@@ -120,7 +117,7 @@ public final class CwClientCommands {
         try {
             player = source.m_81375_();
         } catch (Exception e) {
-            source.m_81352_(Component.m_237113_("[cwguard] must be run by a player"));
+            source.m_81352_(Messages.component("cmd.repro_need_player"));
             return 0;
         }
 
@@ -128,7 +125,7 @@ public final class CwClientCommands {
         ResourceKey<Level> dimension = ResourceKey.m_135785_(Registries.f_256858_, id);
         ServerLevel target = source.m_81377_().m_129880_(dimension);
         if (target == null) {
-            source.m_81352_(Component.m_237113_("[cwguard] unknown dimension: " + id));
+            source.m_81352_(Messages.component("cmd.repro_unknown_dim", String.valueOf(id)));
             return 0;
         }
         boolean loaded = clientWorlds().contains(dimension);
@@ -149,9 +146,7 @@ public final class CwClientCommands {
             .min(Comparator.comparingDouble(candidate -> candidate.m_20280_(player)))
             .orElse(null);
         if (portal == null) {
-            source.m_81352_(Component.m_237113_(
-                "[cwguard] no portal within " + (int) radius + " blocks - stand next to one first"
-            ));
+            source.m_81352_(Messages.component("cmd.repro_no_portal", (int) radius));
             return 0;
         }
 
@@ -160,24 +155,19 @@ public final class CwClientCommands {
             portal.setDestinationDimension(dimension);
             portal.reloadAndSyncToClient();
         } catch (Throwable t) {
-            source.m_81352_(Component.m_237113_("[cwguard] repro failed: " + t));
+            source.m_81352_(Messages.component("cmd.repro_failed", String.valueOf(t)));
             return 0;
         }
 
         String name = dimension.m_135782_().toString();
-        source.m_288197_(() -> Component.m_237113_(
-            "[cwguard] portal " + portal.m_20148_() + " -> " + name
-                + " (distance " + String.format("%.1f", distance) + ")"
-                + (alreadyLoaded ? " [WARNING] this dimension is already loaded, the crash will NOT trigger" : "")
-        ), true);
+        String warn = alreadyLoaded ? Messages.text("cmd.repro_already_loaded") : "";
+        source.m_288197_(() -> Messages.component("cmd.repro_target",
+            portal.m_20148_(), name, String.format("%.1f", distance), warn), true);
         if (!alreadyLoaded) {
             // IP creates the world at packet time; drop it again a few ticks later so
             // the render pass has to create it (that is the path that used to crash).
             CwRepro.scheduleDispose(dimension, 10);
-            source.m_288197_(() -> Component.m_237113_(
-                "[cwguard] " + name + " was created by the portal sync; it will be disposed again in ~0.5s"
-                    + " - keep looking at the portal so the render pass has to recreate it"
-            ), false);
+            source.m_288197_(() -> Messages.component("cmd.repro_dispose", name), false);
         }
         return 1;
     }

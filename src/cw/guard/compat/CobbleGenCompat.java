@@ -1,5 +1,6 @@
 package cw.guard.compat;
 
+import cw.guard.Messages;
 import com.simibubi.create.content.kinetics.drill.CobbleGenLevel;
 import io.github.null2264.cobblegen.CobbleGen;
 import net.minecraft.core.BlockPos;
@@ -84,7 +85,7 @@ public final class CobbleGenCompat {
             Map<FluidType, List<InteractionInformation>> interactions =
                 (Map<FluidType, List<InteractionInformation>>) field.get(null);
             if (interactions == null) {
-                LOG.warn("[cw_portal_guard] cobblegen compat: FluidInteractionRegistry.INTERACTIONS is null, skip");
+                Messages.warn("log.cg_registry_null");
                 return;
             }
 
@@ -103,9 +104,9 @@ public final class CobbleGenCompat {
             }
             ownEntry = entry;
             installed = true;
-            LOG.info("[cw_portal_guard] cobblegen compat installed: own interaction inserted at lava list head");
+            Messages.info("log.cg_installed");
         } catch (Throwable t) {
-            LOG.warn("[cw_portal_guard] cobblegen compat install failed: {}", t.toString());
+            Messages.warn("log.cg_install_failed", String.valueOf(t));
         }
     }
 
@@ -125,11 +126,11 @@ public final class CobbleGenCompat {
             installed = false;
             ownEntry = null;
             if (removed) {
-                LOG.info("[cw_portal_guard] cobblegen compat uninstalled");
+                Messages.info("log.cg_uninstalled");
             }
             return removed;
         } catch (Throwable t) {
-            LOG.warn("[cw_portal_guard] cobblegen compat uninstall failed: {}", t.toString());
+            Messages.warn("log.cg_uninstall_failed", String.valueOf(t));
             return false;
         }
     }
@@ -180,7 +181,7 @@ public final class CobbleGenCompat {
             return true;
         } catch (Throwable t) {
             PENDING.set(null);
-            LOG.debug("[cw_portal_guard] cobblegen compat predict failed: {}", t.toString());
+            Messages.debug("log.cg_predict_failed", String.valueOf(t));
             return false;
         }
     }
@@ -223,7 +224,7 @@ public final class CobbleGenCompat {
             logOnce(level, result);
             return result;
         } catch (Throwable t) {
-            LOG.debug("[cw_portal_guard] cobblegen compat query failed: {}", t.toString());
+            Messages.debug("log.cg_query_failed", String.valueOf(t));
             return null;
         } finally {
             simulation.clear();
@@ -237,7 +238,7 @@ public final class CobbleGenCompat {
                 net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(replaced.m_60734_()));
             String key = dim + "|" + block;
             if (LOGGED.putIfAbsent(key, Boolean.TRUE) == null) {
-                LOG.info("[cw_portal_guard] cobblegen compat active: {} -> {}", dim, block);
+                Messages.info("log.cg_active", dim, block);
             }
         } catch (Throwable ignored) {
             // 日志失败不影响功能

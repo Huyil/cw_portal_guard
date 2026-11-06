@@ -38,16 +38,17 @@ public final class CwGuardCommands {
     public static int status(CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
         CwGuardConfig.logState();
-        String text = "[cwguard] syncPreload=" + CwGuardConfig.portalSyncPrewarm()
+        String switches = "syncPreload=" + CwGuardConfig.portalSyncPrewarm()
             + " tickPreload=" + CwGuardConfig.tickPrewarm()
             + " heal=" + CwGuardConfig.rendererHeal()
             + " renderGuard=" + CwGuardConfig.renderGuard()
             + " configuredFilter=" + CwGuardConfig.configuredJeiFilter()
             + " configuredGuard=" + CwGuardConfig.configuredListGuard()
-            + " dimensionIdGuard=" + CwGuardConfig.dimensionIdGuard();
-        source.m_288197_(() -> Component.m_237113_(text), false);
-        source.m_288197_(() -> Component.m_237113_(
-            "[cwguard] dimension id table: " + DimensionRecordGuard.lastResult()), false);
+            + " dimensionIdGuard=" + CwGuardConfig.dimensionIdGuard()
+            + " glStateReset=" + CwGuardConfig.glStateReset()
+            + " cobblegenCompat=" + CwGuardConfig.cobblegenCompat();
+        source.m_288197_(() -> Component.m_237113_(Messages.text("cmd.status", switches)), false);
+        source.m_288197_(() -> Component.m_237113_(Messages.text("cmd.dimtable_state", DimensionRecordGuard.lastResult())), false);
         return 1;
     }
 
@@ -55,15 +56,10 @@ public final class CwGuardCommands {
         CommandSourceStack source = context.getSource();
         List<String> missing = DimensionRecordGuard.missingDimensions();
         if (missing.isEmpty()) {
-            source.m_288197_(() -> Component.m_237113_(
-                "[cwguard] dimension id table OK - every loaded dimension has an id. "
-                    + DimensionRecordGuard.lastResult()), false);
+            source.m_288197_(() -> Component.m_237113_(Messages.text("cmd.dimtable_ok", DimensionRecordGuard.lastResult())), false);
             return 1;
         }
-        source.m_81352_(Component.m_237113_(
-            "[cwguard] " + missing.size() + " dimension(s) without an id in Immersive Portals' record "
-                + "(players entering these WILL be kicked): " + String.join(", ", missing)
-                + " - run /cwguard status, and check that dimension_id_guard is enabled"));
+        source.m_81352_(Component.m_237113_(Messages.text("cmd.dimtable_missing", missing.size(), String.join(", ", missing))));
         return 0;
     }
 }
