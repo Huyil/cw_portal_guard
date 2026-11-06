@@ -50,6 +50,8 @@ public final class CwClientCommands {
     public static void register(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
         dispatcher.register(Commands.m_82127_("cwguard")
+            // 权限等级 2（OP / 单人作弊）
+            .requires(source -> source.m_6761_(2))
             .then(Commands.m_82127_("status")
                 .executes(CwGuardCommands::status))
             .then(Commands.m_82127_("idtable")
@@ -57,7 +59,6 @@ public final class CwClientCommands {
             .then(Commands.m_82127_("dims")
                 .executes(CwClientCommands::dims))
             .then(Commands.m_82127_("repro")
-                .requires(source -> source.m_6761_(2))
                 .then(Commands.m_82127_("auto")
                     .executes(context -> reproAuto(context, 48.0D))
                     .then(Commands.m_82129_("radius", DoubleArgumentType.doubleArg(1.0D, 256.0D))

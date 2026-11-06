@@ -1,95 +1,103 @@
 # cw_portal_guard
 
-> Cube Warper 的运行时修复集合，**一个 jar 覆盖服务端与客户端**。
-> Forge 1.20.1 / Immersive Portals 3.0.7。
+**English** | [简体中文](README.zh-CN.md)
 
-| | 修复 | 生效侧 |
+> Runtime fixes for Cube Warper. A single jar covers both server and client.
+> Forge 1.20.1 / Immersive Portals 3.0.7.
+
+| | Fix | Side |
 |:--|:--|:--|
-| 1 | IP 维度 id 表缺条目导致的 `Missing Dimension <id>` 踢人 | 服务端 + 单人 |
-| 2 | 首次看穿未加载维度门户时的 `ChunkRenderDispatcher` 空指针崩溃 | 客户端 |
-| 3 | Configured + JEI 配置菜单崩溃 | 客户端 |
-| 4 | Botania 进度饼 HUD 导致区块整片不渲染 | 客户端 |
-| 5 | Create × CobbleGen：刷石机优化在自定义维度静默失效 | 服务端 + 单人 |
+| 1 | `Missing Dimension <id>` kick caused by a missing entry in the Immersive Portals dimension-id table | Server + single-player |
+| 2 | `ChunkRenderDispatcher` null-pointer crash on the first look through a portal into an unloaded dimension | Client |
+| 3 | Configured + JEI config-menu crash | Client |
+| 4 | Botania progress-pie HUD leaving chunk rendering blank | Client |
+| 5 | Create × CobbleGen: cobble-gen optimisation silently disabled in custom dimensions | Server + single-player |
 
-技术细节、根因与验证数据见 **[docs/TECHNICAL.md](docs/TECHNICAL.md)**。
+Root causes, implementation and measurements:
+**[docs/TECHNICAL.md](docs/TECHNICAL.md)** ([中文](docs/TECHNICAL.zh-CN.md)).
 
 ---
 
-## 安装
+## Installation
 
-把 [Releases](https://github.com/Huyil/cw_portal_guard/releases) 里的
-`cw_portal_guard-<version>.jar` 放进 `mods/`：
+Drop `cw_portal_guard-<version>.jar` from
+[Releases](https://github.com/Huyil/cw_portal_guard/releases) into `mods/`:
 
-- **服务端**：修复 1 与 5；
-- **客户端**：修复 2、3、4，以及单人存档内的 1 与 5；
-- 同一个 jar 两端共用，服务端与客户端加载各自对应的修复。
+- **Server**: fixes 1 and 5;
+- **Client**: fixes 2, 3 and 4, plus fixes 1 and 5 inside single-player worlds;
+- The same jar serves both sides; each side loads the fixes that apply to it.
 
 <details>
-<summary>依赖</summary>
+<summary>Dependencies</summary>
 
-- 必需：Forge 47.x、Minecraft 1.20.1、Immersive Portals 3.x
-- 按需自动启用：Create 6.x + CobbleGen 5.x（修复 5）、Configured + JEI（修复 3）
-- 未安装对应模组时相关功能自动跳过
+- Required: Forge 47.x, Minecraft 1.20.1, Immersive Portals 3.x
+- Enabled automatically when present: Create 6.x + CobbleGen 5.x (fix 5), Configured + JEI (fix 3)
+- When an optional mod is absent, the corresponding code path is skipped
 
 </details>
 
-## 配置
+## Configuration
 
-首次启动生成 `config/cw_portal_guard.properties`，默认全部启用。
+`config/cw_portal_guard.properties` is generated on first launch with every switch enabled.
 
-| 开关 | 默认 | 读取时机 | 作用 |
+| Switch | Default | Read at | Effect |
 |:--|:--|:--|:--|
-| `portal_sync_prewarm` | `true` | 每帧 | 修复 2：门目的地同步时预建维度 |
-| `tick_prewarm` | `true` | 每帧 | 修复 2：逐帧预热 |
-| `renderer_heal` | `true` | 每帧 | 修复 2：自愈半初始化渲染器 |
-| `render_guard` | `true` | 每帧 | 修复 2：兜底跳过地形构建 |
-| `configured_jei_filter` | `true` | 每帧 | 修复 3：过滤异常配置项 |
-| `configured_list_guard` | `true` | 每帧 | 修复 3：半初始化屏幕判空 |
-| `gl_state_reset` | `true` | 每帧 | 修复 4：世界渲染前复位 GL 状态 |
-| `dimension_id_guard` | `true` | 世界启动 | 修复 1：补齐 IP 维度 id 表 |
-| `cobblegen_compat` | `true` | 世界启动 | 修复 5：对齐 Create 与 CobbleGen 的产物 |
+| `portal_sync_prewarm` | `true` | every frame | Fix 2: pre-create the dimension when a portal destination syncs |
+| `tick_prewarm` | `true` | every frame | Fix 2: per-frame prewarm |
+| `renderer_heal` | `true` | every frame | Fix 2: reinitialise half-initialised renderers |
+| `render_guard` | `true` | every frame | Fix 2: skip terrain setup as a last resort |
+| `configured_jei_filter` | `true` | every frame | Fix 3: filter entries whose name lookup throws |
+| `configured_list_guard` | `true` | every frame | Fix 3: null-safe tick/render for half-initialised screens |
+| `gl_state_reset` | `true` | every frame | Fix 4: reset GL state before world rendering |
+| `dimension_id_guard` | `true` | world start | Fix 1: complete the IP dimension-id table |
+| `cobblegen_compat` | `true` | world start | Fix 5: align Create's simulated output with CobbleGen |
 
-> 标记「世界启动」的两项在 `ServerStartedEvent` 读取一次，改动后需重进世界或重启服务器。
-> 其余项在对应事件里实时读取。
+> [!NOTE]
+> The two switches marked **world start** are read once in `ServerStartedEvent`.
+> Changes to them take effect after re-entering the world or restarting the server.
+> The remaining switches are read live in their respective events.
 
-## 命令
+## Commands
 
-| 命令 | 可用端 | 说明 |
+`/cwguard` requires **permission level 2** (server operator; in single-player, cheats enabled).
+
+| Command | Available on | Description |
 |:--|:--|:--|
-| `/cwguard status` | 两端 | 当前开关状态与维度 id 表修复结果 |
-| `/cwguard idtable` | 两端 | 列出「已加载但缺少 id」的维度，`0` 个为健康 |
-| `/cwguard dims` | 客户端 | 列出客户端已加载维度 |
-| `/cwguard repro <dimension\|auto> [radius]` | 客户端（单人） | 把最近的门改到指定维度以复现修复 2 |
+| `/cwguard status` | both sides | Current switches and dimension-id repair result |
+| `/cwguard idtable` | both sides | Lists loaded dimensions that have no id; empty means healthy |
+| `/cwguard dims` | client | Lists client-loaded dimensions |
+| `/cwguard repro <dimension\|auto> [radius]` | client (single-player) | Retargets the nearest portal to reproduce fix 2 |
 
-`/cwguard idtable` 可当作修复 1 的复发检查：输出非 0 时表示该维度会触发踢人。
+`/cwguard idtable` doubles as a regression check for fix 1: any output means players entering
+that dimension will be kicked.
 
-## 构建
+## Building
 
 ```bash
-bash build.sh      # 产物 dist/cw_portal_guard-<version>.jar
+bash build.sh      # produces dist/cw_portal_guard-<version>.jar
 ```
 
-构建过程使用 `javac` / `jar`，离线执行。类路径取自本地客户端实例的 SRG jar，
-可用环境变量覆盖：
+The build runs `javac` and `jar` offline. The classpath is taken from a local client
+installation; each path can be overridden:
 
 ```bash
 MC=/path/to/.minecraft MODS=/path/to/instance/mods JDK=/path/to/jdk17 bash build.sh
 ```
 
-## 验证
+## Verification
 
-启动日志示例：
+Startup log example:
 
 ```
 [cw_portal_guard] loaded (v1.4.0) side=DEDICATED_SERVER
-[cw_portal_guard] ServerStartedEvent: 维度表 90 -> 91 条（新增 1）
-[cw_portal_guard] + 补上维度 id: ae2:spatial_storage -> 89
+[cw_portal_guard] ServerStartedEvent: 90 -> 91 entries
+[cw_portal_guard] + added dimension id: ae2:spatial_storage -> 89
 [cw_portal_guard] cobblegen compat installed: own interaction inserted at lava list head
 ```
 
-各修复的 A/B 实测数据见 **[docs/TECHNICAL.md](docs/TECHNICAL.md)**。
+Per-fix A/B measurements are in **[docs/TECHNICAL.md](docs/TECHNICAL.md)**.
 
 ## License
 
-[MIT](LICENSE) — 可自由用于任何整合包与任意服务器，包括商业用途；
-修改与二次分发只需保留版权与许可声明。
+[MIT](LICENSE) — usable in any modpack and on any server, including commercial use.
+Modification and redistribution require the copyright and licence notices to be retained.

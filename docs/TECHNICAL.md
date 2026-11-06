@@ -1,14 +1,16 @@
-# 技术说明
+# Technical Notes
 
-> 本文记录 `cw_portal_guard` 各修复的根因、实现与实测数据。
-> 环境：Minecraft 1.20.1 / Forge 47.4.23 / Immersive Portals 3.0.7。
-> 面向使用者概览见 [README](../README.md)。
+**English** | [简体中文](TECHNICAL.zh-CN.md)
+
+> Root causes, implementation and measurements for each fix in `cw_portal_guard`.
+> Environment: Minecraft 1.20.1 / Forge 47.4.23 / Immersive Portals 3.0.7.
+> For the user-facing overview see [README](../README.md).
 
 ---
 
-## 1. IP 维度 id 表缺条目
+## 1. Missing entry in the IP dimension-id table
 
-### 现象
+### Symptom
 
 ```
 io.netty.handler.codec.EncoderException: java.lang.RuntimeException: Missing Dimension ae2:spatial_storage
@@ -17,84 +19,88 @@ io.netty.handler.codec.EncoderException: java.lang.RuntimeException: Missing Dim
   ... ClientboundPlayerPositionPacket.handler$blb000$immersive_portals$onWrite
 ```
 
-玩家被踢出，服务端生命周期正常，`latest.log` 中该异常可重复出现。
+The player is disconnected. The server lifecycle completes normally and the exception repeats in
+`latest.log` on each login attempt.
 
-### 根因
+### Root cause
 
-`javap -p -c` 核对 Immersive Portals 3.0.7 字节码得到的启动时序：
+Startup order derived from the Immersive Portals 3.0.7 bytecode (`javap -p -c`):
 
 ```mermaid
 sequenceDiagram
-    participant F as Forge 启动流程
+    participant F as Forge startup
     participant IP as IP DimensionIdManagement
     participant MS as MinecraftServer
     participant AE2 as AE2 MinecraftServerMixin
 
-    F->>IP: onServerStarted()（ServerAboutToStart）
+    F->>IP: onServerStarted() (ServerAboutToStart)
     IP->>MS: getAllLevels()
-    Note over IP,MS: 此刻 levelMap 仅含常规维度
-    IP->>IP: completeServerIdRecord() → 写入 imm_ptl_dim_reg.dat
+    Note over IP,MS: levelMap holds the regular dimensions only
+    IP->>IP: completeServerIdRecord() then write imm_ptl_dim_reg.dat
     F->>MS: createLevels()
-    MS->>AE2: 注入点（createLevels 末尾）
+    MS->>AE2: injection point (end of createLevels)
     AE2->>MS: put(ae2:spatial_storage, ServerLevel)
-    Note over IP,AE2: 每次启动均为同一顺序，id 表始终缺少该条目
+    Note over IP,AE2: identical order on every start, the entry stays absent
 ```
 
-`completeServerIdRecord()` 遍历 `server.getAllLevels()`（`MinecraftServer.m_129784_()`）并按 `max+1` 分配 id。
-AE2 的 `appeng.mixins.spatial.MinecraftServerMixin#injectSpatialLevel` 在 `createLevels` 末尾才把
-`ae2:spatial_storage` 加入 levelMap。该顺序在每次启动时保持一致，因此重启后
-`imm_ptl_dim_reg.dat` 仍为 90 条且缺少该维度。
+`completeServerIdRecord()` iterates `server.getAllLevels()` (`MinecraftServer.m_129784_()`) and
+assigns ids with `max+1`. `appeng.mixins.spatial.MinecraftServerMixin#injectSpatialLevel` adds
+`ae2:spatial_storage` to levelMap at the end of `createLevels`. This order repeats on every start,
+so `imm_ptl_dim_reg.dat` keeps 90 entries and the dimension stays absent after a restart.
 
 > [!NOTE]
-> 同类时序适用于所有在 `createLevels` 阶段插入关卡的模组，本修复对它们一并生效。
+> The same ordering affects every mod that inserts a level during `createLevels`.
+> This fix covers all of them.
 
-### 实现
+### Implementation
 
-`cw.guard.DimensionRecordGuard` 在 `ServerStartedEvent` 反射调用 Immersive Portals 自身的公开方法：
+`cw.guard.DimensionRecordGuard` reflectively calls a public Immersive Portals method at
+`ServerStartedEvent`:
 
 ```java
 DimensionIdManagement.updateAndSaveServerDimIdRecord();
 // = completeServerIdRecord()
 // + recordToTag(serverRecord, dim -> true)
-// + NbtIo.writeCompressed(...) → 写入 world/data/imm_ptl_dim_reg.dat
+// + NbtIo.writeCompressed(...) -> writes world/data/imm_ptl_dim_reg.dat
 ```
 
-id 由 Immersive Portals 按 `max+1` 分配，服务端与客户端使用同一张表。
-`ServerStartedEvent` 之后每 20 tick 复查一次，表大小连续 3 次稳定后结束（覆盖关卡懒创建的模组）。
-反射调用失败时记录一条日志，服务端继续启动。
+Ids are assigned by Immersive Portals with `max+1`; server and client share the same table. After
+`ServerStartedEvent` the guard re-checks every 20 ticks and stops once the table size has been
+stable for 3 consecutive checks, which covers mods that create levels lazily. A failed reflective
+call logs one line and the server continues to start.
 
-### 运维接口
+### Operations interface
 
-`/cwguard idtable` 遍历 `server.getAllLevels()` 并对每个维度调用
-`DimensionIdRecord#getIntId`，输出缺少 id 的维度列表。输出为空表示健康。
+`/cwguard idtable` iterates `server.getAllLevels()` and calls `DimensionIdRecord#getIntId` for each
+dimension, printing those without an id. Empty output means healthy.
 
-### 实测
+### Measurements
 
 <details>
-<summary>2026-10-31 A/B（测试服）</summary>
+<summary>2026-10-31 A/B on the test server</summary>
 
-基线：把 `imm_ptl_dim_reg.dat` 恢复为缺少条目的 90 条版本。
+Baseline: `imm_ptl_dim_reg.dat` restored to the 90-entry version missing the dimension.
 
 ```
 11:49:28  loaded (v1.3.0) side=DEDICATED_SERVER
 11:49:28  toggles (...): dimensionIdGuard=true
-11:49:57  ServerStartedEvent: 维度表 90 -> 91 条（新增 1）
-11:49:57  + 补上维度 id: ae2:spatial_storage -> 89
-11:50:08  维度 id 表修复完成：91 条（4 次尝试），ae2:spatial_storage -> 89（已收录）
+11:49:57  ServerStartedEvent: table 90 -> 91 entries (+1)
+11:49:57  + added dimension id: ae2:spatial_storage -> 89
+11:50:08  dimension id repair complete: 91 entries (4 attempts), ae2:spatial_storage -> 89
 grep -c "Missing Dimension"  ->  0
 /cwguard idtable             ->  dimension id table OK - every loaded dimension has an id
 ```
 
-真实客户端把玩家传送进 `ae2:spatial_storage` 停留 5 秒再传回，
-`grep -c "lost connection"` = 0。
+A real client was teleported into `ae2:spatial_storage`, held there for 5 seconds and moved back;
+`grep -c "lost connection"` = 0.
 
 </details>
 
 ---
 
-## 2. 首次跨维度门户渲染崩溃
+## 2. Crash on the first cross-dimension portal render
 
-### 现象
+### Symptom
 
 ```
 java.lang.NullPointerException: Cannot invoke
@@ -103,76 +109,80 @@ because "this.f_109436_" is null
   at LevelRenderer.handler$com000$immersive_portals$onSetupTerrainBegin(LevelRenderer.java:8349)
 ```
 
-触发条件：门的目的地被改为本次会话尚未加载过的维度，且玩家正注视该门。
-该维度在同一会话内加载过一次后，后续渲染走已初始化路径。
+Trigger: a portal destination is changed to a dimension that has not been loaded in the current
+session, while the player looks at that portal. Once the dimension has been loaded in the session,
+later renders take the initialised path.
 
-### 根因
+### Root cause
 
-`ClientWorldLoader.createSecondaryClientWorld()` 在渲染帧内执行
-`new LevelRenderer(...).setLevel(newWorld)`；`setLevel()` 对非空 level 调用 `allChanged()`，
-`chunkRenderDispatcher` 与 `ViewArea` 在此方法中创建。Immersive Portals 的
-`MixinLevelRenderer.onReloadStarted` 在 `WorldRenderInfo.isRendering()` 时取消 `allChanged()`，
-新渲染器保持 `level != null` 且 `chunkRenderDispatcher == null`，
-随后 `onSetupTerrainBegin` 无条件调用 `chunkRenderDispatcher.setCamera(...)`。
+`ClientWorldLoader.createSecondaryClientWorld()` runs inside the render pass and calls
+`new LevelRenderer(...).setLevel(newWorld)`. For a non-null level, `setLevel()` calls `allChanged()`,
+which is where `chunkRenderDispatcher` and `ViewArea` are created. Immersive Portals'
+`MixinLevelRenderer.onReloadStarted` cancels `allChanged()` while `WorldRenderInfo.isRendering()`
+is true, leaving the new renderer with `level != null` and `chunkRenderDispatcher == null`.
+`onSetupTerrainBegin` then calls `chunkRenderDispatcher.setCamera(...)` unconditionally.
 
-### 实现
+### Implementation
 
-| 组件 | 注入点 / 时机 | 行为 |
+| Component | Hook / timing | Behaviour |
 |:--|:--|:--|
-| `MixinPortalSync` | `Portal#acceptDataSync` RETURN（收包阶段） | 目的地变更后预建该维度的 `ClientLevel` |
-| `ClientGuard` | `RenderTickEvent.START`、`ClientTickEvent.END` | 预热已加载门的目的地维度；重新初始化 `chunkRenderDispatcher` 为空的渲染器 |
-| `MixinLevelRendererGuard` | `setupRender` HEAD，priority 3000 | 检测到 `chunkRenderDispatcher == null` 时跳过该帧地形构建 |
-| `LevelRendererAccessor` | `@Accessor("f_109436_")` | 读取 `chunkRenderDispatcher` |
+| `MixinPortalSync` | `Portal#acceptDataSync` RETURN (packet handling) | Creates the destination `ClientLevel` as soon as the destination changes |
+| `ClientGuard` | `RenderTickEvent.START`, `ClientTickEvent.END` | Prewarms loaded portal destinations; reinitialises renderers whose `chunkRenderDispatcher` is null |
+| `MixinLevelRendererGuard` | `setupRender` HEAD, priority 3000 | Skips terrain setup for that frame when `chunkRenderDispatcher` is null |
+| `LevelRendererAccessor` | `@Accessor("f_109436_")` | Reads `chunkRenderDispatcher` |
 
-### 分层验证
+### Layer verification
 
-分层开关用于定位实际生效的层。每轮测试重启客户端以回到首次渲染路径。
+The switches exist to identify which layer actually applies. Each round restarts the client to
+return to the first-render path.
 
-| 仅启用 | 结果 |
+| Only this enabled | Result |
 |:--|:--|
-| 全关 | 崩溃（基线） |
-| `portal_sync_prewarm` | 正常，日志 `prewarmed ... (via portal-sync)` |
-| `tick_prewarm` | 正常，日志 `(via portal-tick)` |
-| `renderer_heal` | 崩溃（自愈晚于异常点） |
-| `render_guard` | 正常，日志 `guard skipped terrain setup` |
-| 全开 | 正常，无 `guard skipped` |
+| all disabled | crash (baseline) |
+| `portal_sync_prewarm` | normal, log `prewarmed ... (via portal-sync)` |
+| `tick_prewarm` | normal, log `(via portal-tick)` |
+| `renderer_heal` | crash (healing happens after the fault) |
+| `render_guard` | normal, log `guard skipped terrain setup` |
+| all enabled | normal, no `guard skipped` |
 
 ---
 
-## 3. Configured + JEI 配置菜单崩溃
+## 3. Configured + JEI config-menu crash
 
-### 根因
+### Root cause
 
-JEI 配置菜单的崩溃报告为 `Ticking screen` / `ListMenuScreen.m_86600_`，前一行日志为
-`IllegalStateException: Config schema is inactive: jei`。
+The crash report reads `Ticking screen` / `ListMenuScreen.m_86600_`; the preceding log line is
+`IllegalStateException: Config schema is inactive: jei`.
 
-链路：JEI 齿轮 → Configured `ModConfigSelectionScreen` → `init()` → `constructEntries()`
-→ `JeiConfig.getFileName()` → JEI 15.60+ 的 `IJeiConfigFile#getPath()` 对远程同步、
-本地无文件的 schema 抛异常 → `init()` 中断，`searchTextField` 未创建 → 下一 tick 空指针。
+Path: JEI config button -> Configured `ModConfigSelectionScreen` -> `init()` -> `constructEntries()`
+-> `JeiConfig.getFileName()` -> JEI 15.60+ `IJeiConfigFile#getPath()` throws for a schema synced
+from a remote server that has no local file -> `init()` aborts, `searchTextField` is never created
+-> null pointer on the next tick.
 
-### 实现
+### Implementation
 
-| 组件 | 行为 |
+| Component | Behaviour |
 |:--|:--|
-| `ConfiguredJeiMixinPlugin` | `configured` 与 `jei` 同时存在时应用兼容 mixin；`ModList` 未就绪时重新探测；目标类缺失由 `required: false` 处理 |
-| `MixinConfiguredConfigMap` | 在 `ClientHandler.createConfigMap` 返回处过滤取文件名会抛异常的配置项 |
-| `MixinConfiguredListGuard` | 屏幕半初始化时跳过 tick/render，字段通过反射读取 |
+| `ConfiguredJeiMixinPlugin` | Applies the compat mixins when both `configured` and `jei` are present; re-probes while `ModList` is unavailable; missing targets are handled by `required: false` |
+| `MixinConfiguredConfigMap` | Filters out config entries whose name lookup throws, at `ClientHandler.createConfigMap` RETURN |
+| `MixinConfiguredListGuard` | Skips tick/render while the screen is half-initialised; fields are read reflectively |
 
-单人 / LAN 场景下服务端配置具备本地文件，条目保持完整显示。
+In single-player and LAN worlds the server config has a local file, so all entries remain visible.
 
 ---
 
-## 4. Botania 进度饼 HUD 导致的区块渲染缺失
+## 4. Botania progress-pie HUD breaking chunk rendering
 
-### 现象
+### Symptom
 
-准星指向处于合成状态的符文祭坛时，玩家所在维度的区块层缺失；
-门对面维度、实体、方块实体、粒子与 HUD 正常渲染。准星移开后同帧恢复。
-客户端进程持续运行，FPS 正常，Embeddium 的 `Geometry Pool` 读数保持非 0。
+While the crosshair points at a crafting Runic Altar, the chunk layer of the player's own
+dimension is missing. The dimension behind a portal, entities, block entities, particles and the
+HUD render normally. Moving the crosshair away restores rendering in the same frame. The client
+process keeps running, FPS stays normal, and Embeddium's `Geometry Pool` reads non-zero.
 
-### 根因
+### Root cause
 
-`vazkii.botania.client.core.helper.RenderHelper#renderProgressPie` 的反编译结果：
+Disassembly of `vazkii.botania.client.core.helper.RenderHelper#renderProgressPie`:
 
 ```
 RenderSystem.clear(256, true);                     // glClear(GL_DEPTH_BUFFER_BIT)
@@ -182,120 +192,125 @@ RenderSystem.depthMask(false);
 RenderSystem.stencilFunc(512 /*GL_NEVER*/, 1, 255);
 RenderSystem.stencilOp(7681, 7680, 7680);
 RenderSystem.stencilMask(255);
-... 以 stencil 裁剪图标 ...
+... stencil-clipped icon ...
 GL11.glDisable(2960);
 ```
 
-该方法在 HUD 阶段通过 LWJGL 直接开关 stencil test，并在返回时保留
-`stencilFunc` / `stencilOp` / `stencilMask` 的设置值。实测帧首 GL 状态：
+The method toggles the stencil test through LWJGL during the HUD pass and returns with the
+`stencilFunc` / `stencilOp` / `stencilMask` values still in place. Measured state at the start of a
+frame:
 
 ```
 stencilTest=false depthTest=false blend=false cull=true colorMask=true depthMask=true depthFunc=515
 stencilFunc=514(GL_EQUAL) ref=1 valueMask=255 writeMask=0 fail=ZERO zfail=KEEP zpass=KEEP
 ```
 
-上述 stencil 残值与该方法的设置值逐项吻合；`depthFunc=GL_LEQUAL`、
-`colorMask/depthMask=true`、`shaderColor=(1,1,1,1)` 均为中性值。
+The stencil values match this method's settings item for item. `depthFunc=GL_LEQUAL`,
+`colorMask/depthMask=true` and `shaderColor=(1,1,1,1)` are neutral.
 
 > [!NOTE]
-> 使用该进度饼的其它 Botania 方块（魔力池、泰拉钢平台等）在被注视时具备相同状态输出，
-> 本层保护对它们同样生效。
+> Other Botania blocks that use the same progress pie (mana pool, terrestrial agglomeration plate)
+> produce the same state while being looked at; this layer covers them too.
 
-### 实现
+### Implementation
 
-`cw.guard.client.GlStateSanitizer` 在 `RenderTickEvent.START`（早于 `LevelRenderer.renderLevel`）
-复位以下状态：
+`cw.guard.client.GlStateSanitizer` resets the following at `RenderTickEvent.START`, before
+`LevelRenderer.renderLevel`:
 
-| 状态 | 值 |
+| State | Value |
 |:--|:--|
-| stencil test | 关闭 |
-| `colorMask` / `depthMask` | 全部为 `true` |
+| stencil test | disabled |
+| `colorMask` / `depthMask` | all `true` |
 | `depthFunc` | `GL_LEQUAL` |
-| depth test / cull / blend | 开 / 开 / 关 |
+| depth test / cull / blend | on / on / off |
 | `shaderColor` | `1, 1, 1, 1` |
 | stencil func / op / mask | `GL_ALWAYS` / `GL_KEEP` / `0xFF` |
 
-`colorMask` 与 `depthMask` 采用先设反再设正的写入序列，确保 GL 调用实际下发。
-状态探针按每 5 帧抽样，仅在脏状态签名变化时记录一条日志。
+`colorMask` and `depthMask` are written with an inverted-then-correct sequence so the GL calls
+actually reach the driver. The state probe samples every 5 frames and logs one line when the
+dirty-state signature changes.
 
-### 实测
+### Measurements
 
-在配置文件恢复为默认（ImmediatelyFast 通用批处理启用、IP `enableClippingMechanism=true`、
-四个门户预热开关关闭）的条件下，祭坛合成 + 准星注视时区块层保持正常渲染，
-准星移开与移回均正常。
+With the config restored to defaults (ImmediatelyFast universal batching enabled, IP
+`enableClippingMechanism=true`, the four portal-prewarm switches disabled), the chunk layer stays
+correct while the altar crafts and the crosshair rests on it, and moving the crosshair away and
+back keeps rendering intact.
 
 ---
 
-## 5. Create × CobbleGen 产物对齐
+## 5. Aligning Create and CobbleGen output
 
-### 现象
+### Symptom
 
-Create 钻头的刷石机优化（下方为漏斗 / 滑槽 / 传送带时，掉落物直接写入容器）
-在部分维度退化为生成物品实体。方块生成与钻头运转正常，日志无异常输出。
+Create drills lose the cobble-gen optimisation (drops written straight into a hopper, chute or
+belt) in some dimensions and spawn item entities instead. Block generation and drill motion are
+normal and the log stays clean.
 
-### 根因
+### Root cause
 
 ```mermaid
 flowchart LR
-    A[熔岩 + 水] --> B[CobbleGen 实际生成路径]
-    A --> C[Create 模拟路径]
-    B --> D["config/cobblegen.json5<br/>按维度覆盖产物"]
-    D --> E["dry_ocean → sandstone<br/>magma_plateau → seared_cobble"]
+    A["lava + water"] --> B["CobbleGen generation path"]
+    A --> C["Create simulation path"]
+    B --> D["config/cobblegen.json5<br/>per-dimension override"]
+    D --> E["dry_ocean -> sandstone<br/>magma_plateau -> seared_cobble"]
     C --> F["CobbleGenOptimisation#determineOutput<br/>Forge FluidInteractionRegistry"]
     F --> G["minecraft:cobblestone"]
     E --> H{"equals(stateToBreak)"}
     G --> H
-    H -->|false| I["optimiseCobbleGen 返回 false<br/>掉落物成为物品实体"]
+    H -->|false| I["optimiseCobbleGen returns false<br/>drops become item entities"]
 ```
 
-CobbleGen 5.4.11 通过 `config/cobblegen.json5` 按维度覆盖真实生成产物，
-其 `create.CreateFluidReactionsMixin$OFive` / `$PatchE` 与 `fluid.*EventMixin`
-作用于流体事件路径。Create 的 `CobbleGenOptimisation#determineOutput` 遍历
-Forge `FluidInteractionRegistry`，熔岩 + 水的默认交互返回 `minecraft:cobblestone`。
-`DrillBlockEntity#optimiseCobbleGen` 中的 `currentOutput.equals(stateToBreak)`
-在产物被覆盖的维度得到 `false`，从而走常规掉落路径。
+CobbleGen 5.4.11 overrides the real generated block per dimension through
+`config/cobblegen.json5`; its `create.CreateFluidReactionsMixin$OFive` / `$PatchE` and
+`fluid.*EventMixin` act on the fluid event path. Create's
+`CobbleGenOptimisation#determineOutput` walks Forge's `FluidInteractionRegistry`, where the default
+lava + water interaction returns `minecraft:cobblestone`. In dimensions where CobbleGen overrides
+the output, `DrillBlockEntity#optimiseCobbleGen` evaluates `currentOutput.equals(stateToBreak)` to
+`false` and takes the regular drop path.
 
-未被 CobbleGen 配置的维度保持默认圆石，两条路径结果一致。
+Dimensions without a CobbleGen entry keep the default cobblestone, where both paths agree.
 
-### 实现
+### Implementation
 
-`cw.guard.compat.CobbleGenCompat` 在 `ServerStartedEvent` 向
-Forge `FluidInteractionRegistry` 的熔岩交互列表头部插入一条 `InteractionInformation`：
+`cw.guard.compat.CobbleGenCompat` inserts one `InteractionInformation` at the head of the lava
+interaction list in Forge's `FluidInteractionRegistry` during `ServerStartedEvent`:
 
-| 阶段 | 行为 |
+| Stage | Behaviour |
 |:--|:--|
-| predicate | 以 Create 的 `CobbleGenLevel` 仿真层运行 `CobbleGen.FLUID_INTERACTION.interact(...)`；`setBlock` 被记录到 `blocksAdded`，产物写入 `ThreadLocal` |
-| interaction | 将 `ThreadLocal` 中的产物写入传入的 level（模拟时为仿真层，流体事件时为真实世界） |
+| predicate | Runs `CobbleGen.FLUID_INTERACTION.interact(...)` against a Create `CobbleGenLevel` simulation layer; `setBlock` is recorded into `blocksAdded`, and the product is stored in a `ThreadLocal` |
+| interaction | Writes the stored product into the level passed in (the simulation layer during prediction, the real world during fluid events) |
 
-Create 的模拟循环采用首个 predicate 命中的条目。CobbleGen 覆盖该维度时，
-模拟结果取自 CobbleGen 的判定代码；覆盖未生效时该条目返回 `false`，
-循环继续到 Forge 默认条目。
+Create's simulation loop takes the first entry whose predicate matches. Where CobbleGen covers the
+dimension, the simulated output comes from CobbleGen's own decision code; where it does not, the
+entry returns `false` and the loop continues to the Forge default entries.
 
-注册表实现使预测与真实生成共用同一份 CobbleGen 判定逻辑。
-CobbleGen 后续版本若补全该路径，其计算结果与本条目的结果相同；
-`cobblegen_compat=false` 会在 `ServerStartedEvent` 时按引用移除该条目。
+The registry approach makes prediction and real generation share one CobbleGen decision path. If a
+later CobbleGen release completes this path, its computed result equals this entry's result.
+Setting `cobblegen_compat=false` removes the entry by reference at `ServerStartedEvent`.
 
-### 实测
+### Measurements
 
 <details>
-<summary>2026-11-06（测试服，Create 6.0.8 / CobbleGen 5.4.11）</summary>
+<summary>2026-11-06 on the test server (Create 6.0.8 / CobbleGen 5.4.11)</summary>
 
-函数级，`determineOutput` 与实际方块：
+Function level, `determineOutput` against the actual block:
 
 ```
-dry_ocean      actual=sandstone       simulated=sandstone       match=true   （修复前 false）
-magma_plateau  actual=seared_cobble   simulated=seared_cobble   match=true   （修复前 false）
+dry_ocean      actual=sandstone       simulated=sandstone       match=true   (false before the fix)
+magma_plateau  actual=seared_cobble   simulated=seared_cobble   match=true   (false before the fix)
 red_canyon     actual=cobblestone     simulated=cobblestone     match=true
 ```
 
-端到端，直接调用 `DrillBlockEntity#onBlockBroken`，三个维度：
+End to end, calling `DrillBlockEntity#onBlockBroken` directly, three dimensions:
 
 ```
 verdict=OPTIMISED (drops went straight into the container, no item entity)   x3
 before: container=0 itemEntities=0  ->  after: container=1 (+1) itemEntities=0 (+0)
 ```
 
-日志：
+Log:
 
 ```
 [cw_portal_guard] cobblegen compat installed: own interaction inserted at lava list head
@@ -307,46 +322,48 @@ before: container=0 itemEntities=0  ->  after: container=1 (+1) itemEntities=0 (
 
 ---
 
-## 6. 构建与运行约束
+## 6. Build and runtime constraints
 
-### 双端隔离
+### Two-sided isolation
 
-`mods.toml` 中所有依赖声明为 `side="BOTH"`。客户端代码位于 `cw.guard.client.*`，
-由 `@EventBusSubscriber(value = Dist.CLIENT)` 门控；渲染 mixin 位于 mixin 配置的
-`"client"` 段。专用服务端的 classpath 中不含 `net.minecraft.client.*`，
-上述类在该环境下保持未加载状态。
+Every dependency in `mods.toml` declares `side="BOTH"`. Client code lives in `cw.guard.client.*` and
+is gated by `@EventBusSubscriber(value = Dist.CLIENT)`; render mixins sit in the `"client"` section
+of the mixin configuration. A dedicated server's classpath holds no `net.minecraft.client.*`, so
+those classes stay unloaded there.
 
-`ServerStartedEvent` 在单人存档的集成服务端同样触发，修复 1 与 5 在单人模式下执行。
+`ServerStartedEvent` also fires on the integrated server of a single-player world, so fixes 1 and 5
+run in single-player.
 
-### 构建依赖
+### Build dependencies
 
-`build.sh` 的类路径由本地客户端实例提供：
+`build.sh` takes its classpath from a local client installation:
 
-| 依赖 | 用途 |
+| Dependency | Purpose |
 |:--|:--|
-| `client-*-srg.jar` | Minecraft 类（源码直接使用 SRG 名） |
-| `forge-*-universal.jar` / eventbus / fmlcore / fmlloader / javafmllanguage | Forge API |
+| `client-*-srg.jar` | Minecraft classes (sources use SRG names directly) |
+| `forge-*-universal.jar`, eventbus, fmlcore, fmlloader, javafmllanguage | Forge API |
 | `mergetool-*-api.jar` | `net.minecraftforge.api.distmarker.Dist` |
-| `lwjgl-opengl` / `lwjgl` | `org.lwjgl.opengl.GL11` |
-| `immersive-portals-*.jar`、`configured-forge-*.jar` | 对应修复 |
-| `create-*.jar`、`cobblegen-*.jar` | 修复 5 |
-| `libs/catnip.jar` | 从 `create` jar 的 jarjar 条目中提取，提供 `WrappedLevel` |
+| `lwjgl-opengl`, `lwjgl` | `org.lwjgl.opengl.GL11` |
+| `immersive-portals-*.jar`, `configured-forge-*.jar` | Corresponding fixes |
+| `create-*.jar`, `cobblegen-*.jar` | Fix 5 |
+| `libs/catnip.jar` | Extracted from the jarjar entry of the `create` jar; provides `WrappedLevel` |
 
-`libs/` 为构建产物，已列入 `.gitignore`。`MC` / `MODS` / `JDK` 支持环境变量覆盖。
+`libs/` is a build artefact and is listed in `.gitignore`. `MC`, `MODS` and `JDK` accept environment
+overrides.
 
-### 已知边界
+### Known boundaries
 
-| 项 | 行为 |
+| Item | Behaviour |
 |:--|:--|
-| 修复 1 的反射目标 | 依赖 IP 的 `updateAndSaveServerDimIdRecord()` 方法名；该方法变更时记录 error 日志，服务端继续启动，可由 `/cwguard idtable` 检出 |
-| `ServerStartedEvent` 之前的登录 | 该连接取到旧 id 表，重连后恢复 |
-| 修复 5 的反射目标 | 依赖 Forge `FluidInteractionRegistry.INTERACTIONS` 字段及熔岩列表可变；变更时记录 warn 日志，功能退回默认行为 |
-| 修复 5 的流体事件路径 | predicate 在真实世界熔岩流动时同样执行，产物取自 CobbleGen 判定代码 |
-| `/cwguard repro` | 依赖客户端世界表，仅在单人 / 集成服务端注册 |
+| Fix 1 reflective target | Depends on IP's `updateAndSaveServerDimIdRecord()`. If the method is renamed, one error line is logged, the server continues to start, and `/cwguard idtable` reports it |
+| Login before `ServerStartedEvent` | That connection reads the previous id table and recovers on reconnect |
+| Fix 5 reflective target | Depends on the Forge `FluidInteractionRegistry.INTERACTIONS` field and a mutable lava list. If either changes, one warn line is logged and the behaviour falls back to the default |
+| Fix 5 fluid event path | The predicate also runs during real-world lava flow; the product comes from CobbleGen's decision code |
+| `/cwguard repro` | Relies on the client world table and is registered in single-player / integrated server only |
 
-### 静态校验
+### Static verification
 
-对 `dist/cw_portal_guard-1.4.0.jar` 做过常量池引用扫描：
-所有类引用在客户端 classpath（MC srg jar、Forge、Immersive Portals、Configured）
-上均可解析。`ClientGuard` 的方法集与 v1.2.0 的 `CwPortalGuard` 一致，
-两个 mixin 配置文件与 v1.2.0 逐字节相同。
+A constant-pool reference scan of `dist/cw_portal_guard-1.4.0.jar` resolves every class reference
+against the client classpath (MC srg jar, Forge, Immersive Portals, Configured). The `ClientGuard`
+method set matches `CwPortalGuard` from v1.2.0, and both mixin configuration files are
+byte-identical to v1.2.0.

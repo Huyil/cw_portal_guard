@@ -29,6 +29,8 @@ public final class CwGuardCommands {
     public static void registerServer(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
         dispatcher.register(Commands.m_82127_("cwguard")
+            // 权限等级 2（OP / 单人作弊）
+            .requires(source -> source.m_6761_(2))
             .then(Commands.m_82127_("status").executes(CwGuardCommands::status))
             .then(Commands.m_82127_("idtable").executes(CwGuardCommands::idtable)));
     }
