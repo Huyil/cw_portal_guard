@@ -340,7 +340,13 @@ Create 的模拟循环是"取第一个 predicate 命中的条目"，我们的条
 签名，Create 升级（上游 1.21 已重构过两次）会硬失败或静默失效；而注册表是本来就有的扩展点，
 失败模式是"功能退回现状"，且预测与现实共用 CobbleGen 同一份代码，不可能漂移。
 
-开关：`cobblegen_compat`（默认开）。所有路径 try/catch，异常一律退回默认行为。
+开关：`cobblegen_compat`（默认开）。与 `dimension_id_guard` 一致，**在世界/服务器启动时读取一次**
+（`ServerStartedEvent`），改完需重进世界或重启服务器才生效；不存在每 tick 轮询的热切换。
+所有路径 try/catch，异常一律退回默认行为。
+
+将来 CobbleGen 若自己修好，本层是**幂等**的，不会冲突：CobbleGen 修好后会算出同样正确的产物，
+我们只是让 Create 的模拟更早得到同一个答案（前提不成立时 predicate 不命中，自动让位）。
+想彻底撤掉就设 `cobblegen_compat=false` 并重启。
 
 ### 6.4 验证（2026-11-06，测试服）
 

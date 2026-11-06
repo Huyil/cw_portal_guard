@@ -64,15 +64,18 @@ public final class CobbleGenCompat {
 
     private static volatile boolean installed;
 
+    /** 我们自己插入的那条交互；卸载时按引用移除，绝不误删别人的条目。 */
+    private static volatile InteractionInformation ownEntry;
+
     private CobbleGenCompat() {
     }
 
     /** 幂等安装：把我们的交互插到熔岩交互列表头部。 */
     public static void install() {
-        if (installed) {
-            return;
-        }
         try {
+            if (installed && isStillInstalled()) {
+                return;
+            }
             InteractionInformation entry = new InteractionInformation(CobbleGenCompat::predict, CobbleGenCompat::place);
 
             Field field = FluidInteractionRegistry.class.getDeclaredField("INTERACTIONS");
@@ -98,11 +101,63 @@ public final class CobbleGenCompat {
                 copy.add(0, entry);
                 interactions.put(lavaType, copy);
             }
+            ownEntry = entry;
             installed = true;
             LOG.info("[cw_portal_guard] cobblegen compat installed: own interaction inserted at lava list head");
         } catch (Throwable t) {
             LOG.warn("[cw_portal_guard] cobblegen compat install failed: {}", t.toString());
         }
+    }
+
+    /** 把我们的条目从列表里摘掉（按引用），返回是否真的摘掉了。 */
+    public static boolean uninstall() {
+        try {
+            if (!isStillInstalled()) {
+                installed = false;
+                ownEntry = null;
+                return false;
+            }
+            List<InteractionInformation> list = lavaInteractions();
+            if (list == null) {
+                return false;
+            }
+            boolean removed = list.remove(ownEntry);
+            installed = false;
+            ownEntry = null;
+            if (removed) {
+                LOG.info("[cw_portal_guard] cobblegen compat uninstalled");
+            }
+            return removed;
+        } catch (Throwable t) {
+            LOG.warn("[cw_portal_guard] cobblegen compat uninstall failed: {}", t.toString());
+            return false;
+        }
+    }
+
+    /** 运行时检查：我们那条是否还在注册表里（可能被别的 mod 重建过列表）。 */
+    private static boolean isStillInstalled() {
+        try {
+            InteractionInformation entry = ownEntry;
+            if (entry == null) {
+                return false;
+            }
+            List<InteractionInformation> list = lavaInteractions();
+            return list != null && list.contains(entry);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<InteractionInformation> lavaInteractions() throws Exception {
+        Field field = FluidInteractionRegistry.class.getDeclaredField("INTERACTIONS");
+        field.setAccessible(true);
+        Map<FluidType, List<InteractionInformation>> interactions =
+            (Map<FluidType, List<InteractionInformation>>) field.get(null);
+        if (interactions == null) {
+            return null;
+        }
+        return interactions.get(ForgeMod.LAVA_TYPE.get());
     }
 
     // ---------------------------------------------------------------- predicate

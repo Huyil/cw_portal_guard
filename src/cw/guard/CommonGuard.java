@@ -42,13 +42,17 @@ public final class CommonGuard {
         // CobbleGen 兼容：只有装了 CobbleGen 且开关打开时才加载 CobbleGenCompat（惰性类加载，
         // 缺 mod 时不会触发 NoClassDefFoundError）
         try {
-            if (CwGuardConfig.cobblegenCompat()
+            boolean want = CwGuardConfig.cobblegenCompat()
                 && net.minecraftforge.fml.ModList.get() != null
-                && net.minecraftforge.fml.ModList.get().isLoaded("cobblegen")) {
+                && net.minecraftforge.fml.ModList.get().isLoaded("cobblegen");
+            if (want) {
                 cw.guard.compat.CobbleGenCompat.install();
+            } else {
+                // 单人可反复进出世界：开关在两次启动之间被改成 false 时要撤掉
+                cw.guard.compat.CobbleGenCompat.uninstall();
             }
         } catch (Throwable t) {
-            CwPortalGuard.LOGGER.warn("[cw_portal_guard] cobblegen compat not installed: {}", t.toString());
+            CwPortalGuard.LOGGER.warn("[cw_portal_guard] cobblegen compat sync failed: {}", t.toString());
         }
     }
 
